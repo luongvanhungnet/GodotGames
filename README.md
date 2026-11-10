@@ -9,8 +9,13 @@ Offline Android prototype, 720 x 1280 portrait viewport.
 - **Block Exit:** select a block, then swipe or use the arrow buttons to slide it
   through a gate with the same color and symbol.
 
-Each game has 30 deterministic, solution-checked levels, undo, restart, a level
-chooser, and locally saved completion progress. All levels are open for comparison.
+Each game has 150 deterministic, solution-checked levels, undo, restart, a paged
+level chooser, and locally saved completion progress. All levels are open.
+Solve timers, total move/undo counters, per-level high scores, fastest times, and
+fewest-move records are saved for up to eight named players on one device.
+Open **Rankings** on the collection screen to compare total best scores across
+all games or filter to Parcel Sort / Block Exit. Rankings are local to this device.
+See [scoring and rankings](PocketPuzzle/docs/scoring.md) for the rules.
 The game works offline without ads, purchases, accounts, or analytics.
 See the [playtest guide](PocketPuzzle/docs/playtest.md) for controls and comparison tasks.
 
@@ -33,9 +38,10 @@ Run project commands from the project directory:
     godot --headless --path . --editor --import --quit
     godot --headless --path . --script tests/smoke.gd
     godot --headless --path . --script tests/gameplay.gd
+    godot --headless --path . --script tests/records.gd
     godot --headless --path . --quit-after 5
 
-Regenerate levels with `python tools/generate_levels.py`, then rerun both test suites.
+Regenerate levels with `python tools/generate_levels.py`, then rerun all test suites.
 The generator uses Python's standard library; the game runtime is entirely GDScript.
 For optional GPU screenshots at 720 x 1280, run
 `godot --path . --script tests/capture.gd`. Captures go in ignored `builds/`.

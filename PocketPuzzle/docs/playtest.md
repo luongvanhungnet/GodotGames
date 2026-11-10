@@ -1,13 +1,15 @@
-# PocketPuzzle playtest build 0.2.0
+# PocketPuzzle playtest build 0.3.0
 
 This build compares two playable 2D puzzle ideas. It is an offline prototype for
 testing enjoyment, clarity, and difficulty. Revenue and retention are unmeasured.
 
 ## Controls
 
-Choose a game from the collection. The level button opens all 30 levels. Undo
+Choose a game from the collection. The level button opens all 150 levels in pages
+of 30. Undo
 restores a full move, Restart resets the current puzzle, and Android Back returns
-to the collection. Completion and the next level are saved locally. An unfinished
+to the collection. Completion, solve records, and the next level are saved locally
+for each named player. An unfinished
 board restarts when the app is relaunched. Uninstalling the app removes its progress.
 
 ### Parcel Sort
@@ -29,7 +31,7 @@ the four arrow buttons. Every action moves one grid cell. Entire rectangular
 blocks must fit their matching gate before they can leave. Blocks cannot overlap,
 rotate, or leave through other boundaries. Deliver every block to finish.
 
-Early levels have small boards with few pieces. Later levels introduce rectangular
+Early levels have few pieces. Later levels introduce rectangular
 blocks and four gate types. Both blocks and gates carry matching symbols.
 
 ## A practical comparison session
@@ -51,15 +53,18 @@ the app does not transmit playtest observations.
 ## Technical validation
 
 - The level generator uses fixed per-level seeds and constructive solutions.
-  All 30 Parcel boards and all 30 Block boards are distinct.
-- `tests/gameplay.gd` checks all 60 solutions against the GDScript rules, parcel
+  All 150 Parcel boards and all 150 Block boards are distinct. The original first
+  30 levels are preserved. Later Parcel levels add longer, alternating orders.
+- `tests/gameplay.gd` checks all 300 solutions against the GDScript rules, parcel
   conservation, waiting capacity, blocked moves, collisions, gate fit, and undo.
 - `tests/smoke.gd` loads both games, completes their first levels through the UI
-  controller, checks the win flow and chooser, and reloads saved completion.
+  controller, checks records, rankings, the expanded chooser, and saved completion.
+- `tests/records.gd` verifies clock pause/resume, scoring, independent records,
+  replay handling, ranking ties, profile isolation, and migration from earlier saves.
 - Tests use their own progress files and leave the player's save untouched.
 - `tests/capture.gd` captures the collection and first/last boards with a real GPU.
 
-On 2026-11-11, Windows and WSL tests passed (2,850 gameplay checks). GPU captures
+For build 0.2.0 on 2026-11-11, Windows and WSL tests passed (2,850 gameplay checks). GPU captures
 confirmed that controls fit a 720 x 1280 viewport. On an OPPO CPH1803 running Android
 8.1, actual touch input completed Parcel Sort level 1 in six moves and Block Exit
 level 1 in seven moves, including a swipe and arrow buttons. Screenshots confirmed

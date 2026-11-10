@@ -2,7 +2,7 @@
 
 Lightweight offline portrait Android puzzle game. Godot 4.7.2 Standard,
 GDScript, Compatibility renderer. Pin matching editor and export templates.
-The current playtest build contains Parcel Sort and Block Exit, with 30 levels each.
+The current playtest build contains Parcel Sort and Block Exit, with 150 levels each.
 
 ## Rules
 - The only Git repository is the repository root; never initialize one in PocketPuzzle/.
@@ -22,7 +22,9 @@ The current playtest build contains Parcel Sort and Block Exit, with 30 levels e
 - Import: godot --headless --path . --editor --import --quit
 - Smoke check: godot --headless --path . --script tests/smoke.gd
 - Gameplay: godot --headless --path . --script tests/gameplay.gd
-- The gameplay suite replays all 60 solutions and checks undo, collisions, and gates.
+- Records: godot --headless --path . --script tests/records.gd
+- The gameplay suite replays all 300 solutions and checks undo, collisions, and gates.
+- Records tests cover active solve time, scores, local rankings, and save migration.
 - Run relevant gameplay tests when gameplay is added.
 - Fail tests with nonzero exit status. Report checks that could not run.
 - Headless results do not establish rendering quality or device performance.

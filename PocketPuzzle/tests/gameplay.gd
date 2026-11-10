@@ -17,7 +17,7 @@ func _check(condition: bool, message: String) -> void:
 func _run() -> void:
 	create_timer(20).timeout.connect(func(): push_error("Gameplay tests timed out"); quit(1))
 	var data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://assets/data/levels.json"))
-	_check(data.parcel.size() == 30 and data.block.size() == 30, "Expected 30 levels in both games")
+	_check(data.parcel.size() == 150 and data.block.size() == 150, "Expected 150 levels in both games")
 	for number in range(data.parcel.size()):
 		var game = Parcel.new()
 		game.setup(data.parcel[number])
@@ -48,7 +48,7 @@ func _run() -> void:
 	_test_parcel_edges()
 	_test_block_edges(data.block[29])
 	if failures == 0:
-		print("PASS: 60 level solutions, conservation, collisions, gates, rejection, and undo (%d checks)" % checks)
+		print("PASS: 300 level solutions, conservation, collisions, gates, rejection, and undo (%d checks)" % checks)
 	quit(0 if failures == 0 else 1)
 
 func _no_overlap(game) -> bool:

@@ -8,6 +8,8 @@ import json
 from pathlib import Path
 import random
 
+LEVEL_COUNT = 150
+
 
 def parcel_solution(queues, route, capacity=3):
     initial = ((0,) * len(queues), (), 0)
@@ -43,10 +45,11 @@ def parcel_solution(queues, route, capacity=3):
 
 def make_parcels():
     levels = []
-    for number in range(1, 31):
+    for number in range(1, LEVEL_COUNT + 1):
         rng = random.Random(7100 + number)
         colors = 3 if number <= 15 else 4
-        length = 2 if number <= 5 else (3 if number <= 15 else 4)
+        length = (2 if number <= 5 else 3 if number <= 15 else
+                  4 if number <= 60 else 5 if number <= 100 else 6)
         if number == 1:
             queues = [[0, 0], [1, 1], [2, 2]]
         elif number == 2:
@@ -62,7 +65,8 @@ def make_parcels():
                 candidate = [pool[i::3] for i in range(3)]
             else:
                 candidate = queues
-            route = [c for c in range(colors) for _ in range(length)]
+            route = ([c for c in range(colors) for _ in range(length)] if length <= 4
+                     else [c for _ in range(length) for c in range(colors)])
             solution = parcel_solution(candidate, route)
             if solution is not None:
                 # Reject later boards solved entirely without a waiting parcel.
@@ -92,10 +96,10 @@ DIRECTIONS = [(1, 0), (0, 1), (-1, 0), (0, -1)]
 
 def make_blocks():
     levels = []
-    for number in range(1, 31):
+    for number in range(1, LEVEL_COUNT + 1):
         rng = random.Random(9200 + number)
         pieces, solution = [], []
-        count = min(7, 1 + (number + 1) // 3)
+        count = min(10 if number > 30 else 7, 1 + (number + 1) // 3)
         for index in range(count):
             color = index % (3 if number < 9 else 4)
             gate = GATES[color]
@@ -144,6 +148,24 @@ def make_blocks():
         assert pieces
         levels.append(dict(size=5, pieces=pieces, gates=GATES,
                            solution=solution, seed=9200 + number))
+    # A quarter-turn maps each gate exactly onto the next gate in this layout.
+    # Rotate duplicate boards, including their solution, to keep the collection
+    # visually distinct without changing its constructive solvability proof.
+    seen = set()
+    for level in levels:
+        for turns in range(4):
+            key = tuple(sorted((p['x'], p['y'], p['w'], p['h'], p['color'])
+                               for p in level['pieces']))
+            if key not in seen:
+                seen.add(key)
+                break
+            for piece in level['pieces']:
+                piece['x'], piece['y'], piece['w'], piece['h'], piece['color'] = (
+                    5 - piece['y'] - piece['h'], piece['x'], piece['h'],
+                    piece['w'], (piece['color'] + 1) % 4)
+            level['solution'] = [[i, -dy, dx] for i, dx, dy in level['solution']]
+        else:
+            raise RuntimeError('Duplicate Block board after all rotations')
     return levels
 
 
@@ -152,4 +174,4 @@ if __name__ == "__main__":
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(json.dumps(dict(parcel=make_parcels(), block=make_blocks()),
                                       indent=2) + "\n", encoding="utf-8")
-    print(f"Wrote 30 Parcel Sort + 30 Block Exit levels to {destination}")
+    print(f"Wrote {LEVEL_COUNT} Parcel Sort + {LEVEL_COUNT} Block Exit levels to {destination}")

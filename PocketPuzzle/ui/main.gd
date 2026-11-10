@@ -3,6 +3,8 @@ extends Control
 const ParcelRules = preload("res://game/parcel_rules.gd")
 const BlockRules = preload("res://game/block_rules.gd")
 const PuzzleBoard = preload("res://ui/puzzle_board.gd")
+const PlayerRecords = preload("res://game/player_records.gd")
+const SolveClock = preload("res://game/solve_clock.gd")
 const INK := Color("203d43")
 const MUTED := Color("778783")
 const CREAM := Color("f5f2e9")
@@ -12,6 +14,15 @@ const TEAL := Color("368d80")
 var save_path := "user://progress.json"
 var levels: Dictionary = {}
 var progress: Dictionary = {"parcel": [], "block": [], "last_parcel": 0, "last_block": 0}
+var records = PlayerRecords.new()
+var solve_clock = SolveClock.new()
+var attempt_moves := 0
+var undo_count := 0
+var _run_recorded := false
+var _timer_tenth := -1
+var _app_suspended := false
+var _app_unfocused := false
+var stats_label: Label
 var mode := "parcel"
 var level_index := 0
 var rules
@@ -69,6 +80,37 @@ func _notification(what: int) -> void:
 			get_tree().quit()
 		else:
 			show_home()
+	elif what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		if what == NOTIFICATION_APPLICATION_PAUSED:
+			_app_suspended = true
+		else:
+			_app_unfocused = true
+		solve_clock.pause(Time.get_ticks_msec())
+	elif what == NOTIFICATION_APPLICATION_RESUMED or what == NOTIFICATION_APPLICATION_FOCUS_IN:
+		if what == NOTIFICATION_APPLICATION_RESUMED:
+			_app_suspended = false
+		else:
+			_app_unfocused = false
+		if not _app_suspended and not _app_unfocused:
+			solve_clock.resume(Time.get_ticks_msec())
+
+func _process(_delta: float) -> void:
+	if screen_name == "game" and not completion_pending:
+		solve_clock.tick(Time.get_ticks_msec())
+		var tenth := int(solve_clock.elapsed_ms / 100)
+		if tenth != _timer_tenth:
+			_timer_tenth = tenth
+			_update_stats()
+
+func _update_stats() -> void:
+	if is_instance_valid(stats_label):
+		stats_label.text = "%s   /   Moves %d   /   Undo %d" % [SolveClock.format_time(solve_clock.elapsed_ms), attempt_moves, undo_count]
+
+func _level_counts() -> Dictionary:
+	return {"parcel": levels.parcel.size(), "block": levels.block.size()}
+
+func _total_levels() -> int:
+	return levels.parcel.size() + levels.block.size()
 
 func _style(color: Color, radius := 20, border := Color.TRANSPARENT) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
@@ -95,6 +137,8 @@ func _label(text: String, font_size := 24, color := INK) -> Label:
 func _button(text: String, callback: Callable, primary := false) -> Button:
 	var button := Button.new()
 	button.text = text
+	button.clip_text = true
+	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	button.custom_minimum_size.y = 88
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.add_theme_font_size_override("font_size", 24)
@@ -111,6 +155,8 @@ func _button(text: String, callback: Callable, primary := false) -> Button:
 	return button
 
 func _clear_page() -> void:
+	solve_clock.finish(Time.get_ticks_msec())
+	stats_label = null
 	completion_pending = false
 	for child in page.get_children():
 		page.remove_child(child)
@@ -136,6 +182,11 @@ func show_home() -> void:
 	_header("THE PLAYTEST COLLECTION")
 	page.add_child(_label("A little order.\nA lot of satisfaction.", 49))
 	page.add_child(_label("Two pocket-sized puzzles. Find your favorite.", 23, MUTED))
+	var player_row := HBoxContainer.new()
+	player_row.add_theme_constant_override("separation", 12)
+	player_row.add_child(_button("Player: " + records.current().name, show_players))
+	player_row.add_child(_button("Rankings", show_rankings))
+	page.add_child(player_row)
 	_add_game_card("parcel", "01 / PARCEL SORT", "Make every delivery.", "Send parcels in the right order. Keep the waiting area clear.", CORAL)
 	_add_game_card("block", "02 / BLOCK EXIT", "Find a way through.", "Slide each block through its matching gate. One move at a time.", TEAL)
 	var completed: int = progress.parcel.size() + progress.block.size()
@@ -143,11 +194,15 @@ func show_home() -> void:
 	collection.add_theme_stylebox_override("panel", _style(PAPER))
 	var contents := VBoxContainer.new()
 	contents.add_theme_constant_override("separation", 10)
-	contents.add_child(_label("YOUR LITTLE COLLECTION", 18, MUTED))
-	contents.add_child(_label("%d / 60 puzzles complete" % completed, 29))
+	var total_score := 0
+	for row in records.ranking():
+		if row.id == records.active_id:
+			total_score = int(row.score)
+	contents.add_child(_label("HIGH SCORE  /  %d" % total_score, 18, TEAL))
+	contents.add_child(_label("%d / %d puzzles complete" % [completed, _total_levels()], 29))
 	var bar := ProgressBar.new()
 	bar.custom_minimum_size.y = 10
-	bar.max_value = 60
+	bar.max_value = _total_levels()
 	bar.value = completed
 	bar.show_percentage = false
 	bar.add_theme_stylebox_override("background", _style(Color("e7eadd"), 5))
@@ -172,23 +227,34 @@ func _add_game_card(game_mode: String, eyebrow: String, title: String, descripti
 	panel.add_child(contents)
 	page.add_child(panel)
 
-func show_levels(game_mode: String) -> void:
+func show_levels(game_mode: String, page_number: int = -1) -> void:
 	_clear_page()
 	screen_name = "levels"
 	mode = game_mode
 	_header("CHOOSE YOUR PUZZLE")
 	page.add_child(_label("Parcel Sort" if mode == "parcel" else "Block Exit", 46))
-	page.add_child(_label("All 30 levels are open. Completed puzzles have a dot.", 23, MUTED))
+	var count: int = levels[mode].size()
+	var current_page := clampi(int(level_index / 30) if page_number < 0 else page_number, 0, int((count - 1) / 30))
+	page.add_child(_label("%d levels. Completed puzzles have a dot." % count, 23, MUTED))
 	var grid := GridContainer.new()
 	grid.columns = 5
 	grid.add_theme_constant_override("h_separation", 12)
 	grid.add_theme_constant_override("v_separation", 12)
-	for i in range(30):
+	for i in range(current_page * 30, mini(current_page * 30 + 30, count)):
 		var done: bool = progress[mode].has(i)
 		var button := _button("%02d%s" % [i + 1, " ." if done else ""], start_level.bind(mode, i), done)
 		button.custom_minimum_size = Vector2(100, 94)
 		grid.add_child(button)
 	page.add_child(grid)
+	var navigation := HBoxContainer.new()
+	navigation.add_theme_constant_override("separation", 12)
+	var previous := _button("< Previous", show_levels.bind(mode, current_page - 1))
+	previous.disabled = current_page == 0
+	navigation.add_child(previous)
+	var next := _button("Next >", show_levels.bind(mode, current_page + 1))
+	next.disabled = (current_page + 1) * 30 >= count
+	navigation.add_child(next)
+	page.add_child(navigation)
 	page.add_child(_button("Back to collection", show_home))
 
 func start_level(game_mode: String, number: int) -> void:
@@ -200,17 +266,24 @@ func start_level(game_mode: String, number: int) -> void:
 	_save_progress()
 	rules = ParcelRules.new() if mode == "parcel" else BlockRules.new()
 	rules.setup(levels[mode][level_index])
+	attempt_moves = 0
+	undo_count = 0
+	_run_recorded = false
+	_timer_tenth = -1
 	_header("PARCEL SORT" if mode == "parcel" else "BLOCK EXIT")
 	var nav := HBoxContainer.new()
 	nav.add_theme_constant_override("separation", 12)
 	var home_button := _button("< Home", show_home)
+	home_button.custom_minimum_size.x = 130
 	home_button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	nav.add_child(home_button)
-	nav.add_child(_button("LEVEL %02d / 30" % (level_index + 1), show_levels.bind(mode)))
+	nav.add_child(_button("LEVEL %02d / %d" % [level_index + 1, levels[mode].size()], show_levels.bind(mode)))
 	page.add_child(nav)
 	page.add_child(_label("Make room for the right delivery." if mode == "parcel" else "Every color has a way out.", 30))
 	page.add_child(_label("Tap a queue. Matching parcels deliver automatically; others wait." if mode == "parcel" else "Tap a block, then swipe or use the arrows. Match its symbol to a gate.", 23, MUTED))
-	delivery_label = _label("", 21, TEAL)
+	stats_label = _label("", 22, INK)
+	page.add_child(stats_label)
+	delivery_label = _label("", 20, TEAL)
 	page.add_child(delivery_label)
 	meter = ProgressBar.new()
 	meter.custom_minimum_size.y = 8
@@ -247,6 +320,9 @@ func start_level(game_mode: String, number: int) -> void:
 	status_label = _label("No rush. Every puzzle has a solution.", 21, MUTED)
 	status_label.custom_minimum_size.y = 42
 	page.add_child(status_label)
+	solve_clock.start(Time.get_ticks_msec())
+	if _app_suspended or _app_unfocused:
+		solve_clock.pause(Time.get_ticks_msec())
 	_refresh()
 
 func _arrow_move(direction: Vector2i) -> void:
@@ -261,6 +337,7 @@ func play_move(index: int, direction: Vector2i) -> void:
 	if not accepted:
 		status_label.text = "No room. Deliver a matching parcel or undo." if mode == "parcel" else "That way is blocked. Try a clear path to the matching gate."
 		return
+	attempt_moves += 1
 	board.celebrate_move()
 	if mode == "parcel":
 		var count: int = rules.delivered - before
@@ -271,6 +348,8 @@ func play_move(index: int, direction: Vector2i) -> void:
 		status_label.text = "A perfect fit. Block delivered!" if rules.remaining() < before else "Keep going. Clear a path to the gate."
 	_refresh()
 	if rules.won():
+		solve_clock.finish(Time.get_ticks_msec())
+		_update_stats()
 		completion_pending = true
 		var current_board = board
 		await get_tree().create_timer(0.4).timeout
@@ -281,20 +360,24 @@ func undo_move() -> void:
 	if screen_name != "game" or completion_pending:
 		return
 	if rules.undo():
+		undo_count += 1
 		status_label.text = "One step back. A fresh possibility."
 		board.queue_redraw()
 		_refresh()
 
 func _refresh() -> void:
+	var best: Dictionary = records.best(mode, level_index)
+	var high: int = int(best.get("high_score", 0))
 	if mode == "parcel":
-		delivery_label.text = "%d / %d delivered   /   %d moves" % [rules.delivered, rules.route.size(), rules.moves]
+		delivery_label.text = "%d / %d delivered   /   HIGH SCORE %d" % [rules.delivered, rules.route.size(), high]
 		meter.max_value = rules.route.size()
 		meter.value = rules.delivered
 	else:
-		delivery_label.text = "%d blocks to go   /   %d moves" % [rules.remaining(), rules.moves]
+		delivery_label.text = "%d blocks to go   /   HIGH SCORE %d" % [rules.remaining(), high]
 		meter.max_value = rules.pieces.size()
 		meter.value = rules.pieces.size() - rules.remaining()
 	undo_button.disabled = rules.history.is_empty()
+	_update_stats()
 	_update_arrows()
 
 func _update_arrows() -> void:
@@ -305,46 +388,120 @@ func _update_arrows() -> void:
 		arrow_buttons[i].disabled = not rules.can_move(board.selected, directions[i])
 
 func show_result() -> void:
-	var move_count: int = rules.moves
+	if screen_name != "game" or not rules.won() or _run_recorded:
+		return
+	_run_recorded = true
+	solve_clock.finish(Time.get_ticks_msec())
+	var result: Dictionary = records.record(mode, level_index, solve_clock.elapsed_ms, attempt_moves, undo_count)
 	if not progress[mode].has(level_index):
 		progress[mode].append(level_index)
-	progress["last_" + mode] = mini(level_index + 1, 29)
+	progress["last_" + mode] = mini(level_index + 1, levels[mode].size() - 1)
 	_save_progress()
 	_clear_page()
 	screen_name = "result"
 	_header("A LITTLE VICTORY")
 	var space := Control.new()
-	space.custom_minimum_size.y = 80
+	space.custom_minimum_size.y = 24
 	page.add_child(space)
-	page.add_child(_label("Perfectly\nin its place.", 64, TEAL))
-	page.add_child(_label("Level %02d complete in %d moves." % [level_index + 1, move_count], 28))
-	page.add_child(_label("%d / 60 puzzles in your collection." % (progress.parcel.size() + progress.block.size()), 24, MUTED))
-	page.add_child(_button("Next puzzle   >" if level_index < 29 else "Back to collection", start_level.bind(mode, level_index + 1) if level_index < 29 else show_home, true))
+	page.add_child(_label("A new little\nachievement.", 52, TEAL))
+	page.add_child(_label("%d POINTS%s" % [result.score, "  /  NEW HIGH!" if result.new_high else ""], 32, TEAL))
+	page.add_child(_label("Solved in %s   /   Moves %d   /   Undo %d" % [SolveClock.format_time(solve_clock.elapsed_ms), attempt_moves, undo_count], 23))
+	page.add_child(_label("Level best: %d points\nFastest: %s   /   Fewest moves: %d\nTimes solved: %d" % [result.best.high_score, SolveClock.format_time(int(result.best.best_time_ms)), result.best.fewest_moves, result.best.solves], 23, MUTED))
+	page.add_child(_label("%d / %d puzzles in your collection." % [progress.parcel.size() + progress.block.size(), _total_levels()], 22, MUTED))
+	page.add_child(_button("Next puzzle   >" if level_index < levels[mode].size() - 1 else "Back to collection", start_level.bind(mode, level_index + 1) if level_index < levels[mode].size() - 1 else show_home, true))
 	page.add_child(_button("Try the other game", start_level.bind("block" if mode == "parcel" else "parcel", 0)))
 	page.add_child(_button("Choose a level", show_levels.bind(mode)))
+	page.add_child(_button("Player rankings", show_rankings))
 	page.add_child(_button("Home", show_home))
 
+func show_players() -> void:
+	_clear_page()
+	screen_name = "players"
+	_header("PLAYERS ON THIS DEVICE")
+	page.add_child(_label("Make it yours.", 46))
+	page.add_child(_label("Up to 8 local players. Each has their own progress and records.", 23, MUTED))
+	var name_input := LineEdit.new()
+	name_input.name = "PlayerName"
+	name_input.placeholder_text = "Player name"
+	name_input.max_length = 18
+	name_input.custom_minimum_size.y = 88
+	name_input.add_theme_font_size_override("font_size", 28)
+	name_input.add_theme_color_override("font_color", INK)
+	name_input.add_theme_color_override("font_placeholder_color", MUTED)
+	name_input.add_theme_stylebox_override("normal", _style(PAPER))
+	name_input.add_theme_stylebox_override("focus", _style(PAPER, 20, TEAL))
+	page.add_child(name_input)
+	var message := _label("Choose a player, or enter a name above.", 21, MUTED)
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override("separation", 12)
+	actions.add_child(_button("Add player", _add_player.bind(name_input, message), true))
+	actions.add_child(_button("Rename current", _rename_player.bind(name_input, message)))
+	page.add_child(actions)
+	page.add_child(message)
+	for player in records.players:
+		page.add_child(_button(("Selected: " if player.id == records.active_id else "Play as: ") + player.name, _select_player.bind(player.id), player.id == records.active_id))
+	page.add_child(_button("Back to collection", show_home))
+
+func _add_player(input: LineEdit, message: Label) -> void:
+	if records.add_player(input.text).is_empty():
+		message.text = "Use a unique name (1-18 characters). Up to 8 players can be saved."
+		return
+	progress = records.current().progress
+	_save_progress()
+	show_home()
+
+func _rename_player(input: LineEdit, message: Label) -> void:
+	if not records.rename_current(input.text):
+		message.text = "Choose a unique name with 1-18 characters."
+		return
+	_save_progress()
+	show_players()
+
+func _select_player(id: String) -> void:
+	if records.select_player(id):
+		progress = records.current().progress
+		_save_progress()
+		show_home()
+
+func show_rankings(game_mode: String = "all") -> void:
+	_clear_page()
+	screen_name = "rankings"
+	_header("LOCAL PLAYER RANKINGS")
+	page.add_child(_label("A friendly competition.", 42))
+	page.add_child(_label("Best score per level counts once. Ties use levels solved, then total best times.", 22, MUTED))
+	var filters := HBoxContainer.new()
+	filters.add_theme_constant_override("separation", 12)
+	for key in ["all", "parcel", "block"]:
+		filters.add_child(_button({"all": "All games", "parcel": "Parcel", "block": "Block"}[key], show_rankings.bind(key), key == game_mode))
+	page.add_child(filters)
+	for row in records.ranking(game_mode):
+		var panel := PanelContainer.new()
+		panel.add_theme_stylebox_override("panel", _style(PAPER, 20, TEAL if row.id == records.active_id else Color.TRANSPARENT))
+		var contents := VBoxContainer.new()
+		var place := "#%d" % row.rank if row.completed > 0 else "--"
+		contents.add_child(_label("%s   %s%s" % [place, row.name, "  (you)" if row.id == records.active_id else ""], 28))
+		contents.add_child(_label("%d points   /   %d levels scored" % [row.score, row.completed], 23, TEAL))
+		contents.add_child(_label("Total best times: " + SolveClock.format_time(int(row.time_ms)), 20, MUTED))
+		panel.add_child(contents)
+		page.add_child(panel)
+	page.add_child(_label("Rankings are saved on this phone. Scores reward speed and efficient moves; undo has a penalty.", 21, MUTED))
+	page.add_child(_button("Switch player", show_players))
+	page.add_child(_button("Back to collection", show_home))
+
 func _load_progress() -> void:
+	var saved: Variant = {}
 	if not FileAccess.file_exists(save_path):
-		return
-	var file := FileAccess.open(save_path, FileAccess.READ)
-	if file == null:
-		return
-	var saved: Variant = JSON.parse_string(file.get_as_text())
-	if not saved is Dictionary:
-		return
-	for game_mode in ["parcel", "block"]:
-		if saved.get(game_mode) is Array:
-			for number in saved[game_mode]:
-				if (number is float or number is int) and float(number) == floorf(float(number)) and int(number) >= 0 and int(number) < 30 and not progress[game_mode].has(int(number)):
-					progress[game_mode].append(int(number))
-		var last: Variant = saved.get("last_" + game_mode, 0)
-		if last is float or last is int:
-			progress["last_" + game_mode] = clampi(int(last), 0, 29)
+		records.restore({}, _level_counts())
+	else:
+		var file := FileAccess.open(save_path, FileAccess.READ)
+		if file != null:
+			saved = JSON.parse_string(file.get_as_text())
+		records.restore(saved if saved is Dictionary else {}, _level_counts())
+	progress = records.current().progress
 
 func _save_progress() -> void:
 	var file := FileAccess.open(save_path, FileAccess.WRITE)
 	if file != null:
-		file.store_string(JSON.stringify(progress))
+		file.store_string(JSON.stringify(records.to_data()))
 	else:
 		push_warning("Local progress could not be saved")

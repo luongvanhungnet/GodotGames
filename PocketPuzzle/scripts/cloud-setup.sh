@@ -28,4 +28,5 @@ fi
 "$tools_dir/godot" --headless --path . --editor --import --quit
 "$tools_dir/godot" --headless --path . --script tests/smoke.gd
 "$tools_dir/godot" --headless --path . --script tests/gameplay.gd
+"$tools_dir/godot" --headless --path . --script tests/records.gd
 "$tools_dir/godot" --headless --path . --quit-after 5

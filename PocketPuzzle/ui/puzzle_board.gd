@@ -108,10 +108,11 @@ func _draw_parcel() -> void:
 		var rect := Rect2(lane * (lane_width + 16), 296, lane_width, size.y - 300)
 		_box(rect, LANE, 20)
 		var queue: Array = rules.queues[lane]
+		var gap := minf(44.0, (rect.size.y - 52.0) / maxf(1.0, queue.size()))
 		if queue.is_empty():
 			_text("CLEAR", Vector2(rect.get_center().x, rect.position.y + 60), 19, MUTED, true)
 		for i in range(queue.size()):
-			_parcel(Rect2(rect.position.x + 13, rect.position.y + 13 + i * 44, lane_width - 26, 37), int(queue[i]), i == 0)
+			_parcel(Rect2(rect.position.x + 13, rect.position.y + 13 + i * gap, lane_width - 26, gap - 7), int(queue[i]), i == 0)
 		_text("%d left" % queue.size(), Vector2(rect.get_center().x, rect.end.y - 12), 17, MUTED, true)
 
 func _draw_block() -> void:

@@ -26,6 +26,8 @@ func _run() -> void:
 		return
 	var screen := scene.instantiate()
 	screen.save_path = "user://pocketpuzzle-smoke-progress.json"
+	if FileAccess.file_exists(screen.save_path):
+		DirAccess.remove_absolute(screen.save_path)
 	root.add_child(screen)
 	var background := screen.get_node_or_null("Background") as ColorRect
 	if not screen is Control or background == null or screen.levels.is_empty() or screen.screen_name != "home":
@@ -52,15 +54,41 @@ func _run() -> void:
 		if screen.screen_name != "result" or not screen.progress[game_mode].has(0):
 			_fail("Win flow did not complete for " + game_mode)
 			return
+		var best: Dictionary = screen.records.best(game_mode, 0)
+		if best.is_empty() or best.high_score <= 0 or best.solves != 1 or screen.attempt_moves <= 0:
+			_fail("Solve statistics were not recorded")
+			return
+		screen.show_result()
+		if screen.records.best(game_mode, 0).solves != 1:
+			_fail("Duplicate result recorded the solve twice")
+			return
 		screen.show_levels(game_mode)
 		await process_frame
 		if screen.screen_name != "levels":
 			_fail("Level chooser did not open")
 			return
+		screen.show_levels(game_mode, 4)
+		await process_frame
+		screen.start_level(game_mode, 149)
+		await process_frame
+		if screen.level_index != 149 or screen.levels[game_mode].size() != 150:
+			_fail("Expanded level collection is unavailable")
+			return
+		screen.show_home()
+	screen.show_players()
+	await process_frame
+	if screen.screen_name != "players" or screen.page.find_child("PlayerName", true, false) == null:
+		_fail("Local player controls are missing")
+		return
+	screen.show_rankings()
+	await process_frame
+	if screen.screen_name != "rankings" or screen.records.ranking()[0].completed != 2:
+		_fail("Scored wins did not appear in rankings")
+		return
 	var reloaded := scene.instantiate()
 	reloaded.save_path = screen.save_path
 	root.add_child(reloaded)
-	if not reloaded.progress.parcel.has(0) or not reloaded.progress.block.has(0):
+	if not reloaded.progress.parcel.has(0) or not reloaded.progress.block.has(0) or reloaded.records.best("block", 0).is_empty():
 		_fail("Completed levels did not persist")
 		return
 	reloaded.queue_free()
@@ -68,7 +96,7 @@ func _run() -> void:
 	screen.queue_free()
 	await process_frame
 	DirAccess.remove_absolute("user://pocketpuzzle-smoke-progress.json")
-	print("PASS: portrait startup, both playable modes, win flows, level chooser, and saved progress")
+	print("PASS: both games, solve statistics, rankings, 150-level choosers, win flow, and saved records")
 	quit(0)
 
 func _fail(message: String) -> void:
