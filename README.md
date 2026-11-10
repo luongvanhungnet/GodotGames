@@ -44,15 +44,31 @@ Its shell steps run in `PocketPuzzle/`; artifacts come from
 
 Create `builds/` first and configure Android SDK, Java SDK, and debug keystore
 paths in Editor Settings > Export > Android. Never commit keystores or credentials.
-The first hosted run must validate tool downloads and SDK compatibility.
-Update SDK package versions if the pinned Godot export template requires it.
+The hosted build, tool downloads, Linux checks, and APK export have passed.
+See [validation results](PocketPuzzle/docs/validation.md) for evidence and limits.
 Debug APKs are development artifacts, not Google Play release bundles.
 CI debug keys are temporary; use a stable private key for persistent installs.
 
-## Not connected automatically
-Enable GitHub Actions for the repository and connect the repository and environment
-in your Codex Cloud account. Firebase Test Lab requires your account and project;
-Firebase integration and real-device scenarios are not configured.
+## Device and cloud testing
+GitHub Actions is enabled. A debug APK is produced on pushes to main and pull requests.
+For a connected Android phone, install and launch from PocketPuzzle:
+
+    adb -s SERIAL install -r builds/PocketPuzzle-debug.apk
+    adb -s SERIAL shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -f 0x10200000 -n org.pocketpuzzle.prototype/com.godot.game.GodotAppLauncher
+
+Use the Android SDK's adb executable consistently; running multiple versions can
+restart its server. The exported launcher is `GodotAppLauncher`.
+For a one-minute Firebase Test Lab Robo test, authenticate Google Cloud CLI and run:
+
+    bash scripts/test-android-cloud.sh YOUR_GOOGLE_CLOUD_PROJECT
+
+The project needs Firebase Test Lab enabled and test/storage permissions. Quotas
+and billing apply to the selected project. No Firebase runtime SDK or credentials
+are included in the game. Test results remain in the selected Firebase project.
+
+## Account setup still needed
+Connect and publish the repository environment in your Codex Cloud account using
+the setup command above. This local session cannot publish a Codex Cloud environment.
 Before release, select a permanent Android package ID and configure private release
 signing and a Play Console account. On an Android device, verify installation,
 portrait orientation, readable layout on different aspect ratios, safe areas,
