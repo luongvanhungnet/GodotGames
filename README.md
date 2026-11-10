@@ -19,6 +19,10 @@ See [scoring and rankings](PocketPuzzle/docs/scoring.md) for the rules.
 The interface uses pastel colors, smiling parcel/block pals, rounded controls,
 star badges, and a short victory celebration. See the [visual guide and previews](PocketPuzzle/docs/design.md).
 The game works offline without ads, purchases, accounts, or analytics.
+Build 0.5 adds **Daily Joy** (one date-selected puzzle per game with personal bests),
+guided **Learn** lessons, quiet sound effects, optional vibration, and device-wide
+sound/vibration settings. Unfinished regular and daily games resume with their
+board, undo history, counters, and active solve time. See the [Daily Joy guide](PocketPuzzle/docs/daily-joy.md).
 See the [playtest guide](PocketPuzzle/docs/playtest.md) for controls and comparison tasks.
 
 ## Local
@@ -41,6 +45,7 @@ Run project commands from the project directory:
     godot --headless --path . --script tests/smoke.gd
     godot --headless --path . --script tests/gameplay.gd
     godot --headless --path . --script tests/records.gd
+    godot --headless --path . --script tests/daily_joy.gd
     godot --headless --path . --quit-after 5
 
 Regenerate levels with `python tools/generate_levels.py`, then rerun all test suites.

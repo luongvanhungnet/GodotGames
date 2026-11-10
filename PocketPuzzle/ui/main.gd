@@ -8,6 +8,11 @@ const SolveClock = preload("res://game/solve_clock.gd")
 const Look = preload("res://ui/friendly_theme.gd")
 const Art = preload("res://ui/playful_art.gd")
 const STAR = preload("res://assets/ui/star.svg")
+const Daily = preload("res://game/daily_puzzle.gd")
+const Session = preload("res://game/run_session.gd")
+const Store = preload("res://game/save_store.gd")
+const Lesson = preload("res://game/tutorial.gd")
+const Feedback = preload("res://ui/feedback.gd")
 const INK := Look.INK
 const MUTED := Look.MUTED
 const CREAM := Look.BACKGROUND
@@ -39,6 +44,19 @@ var arrow_buttons: Array[Button] = []
 var screen_name := "home"
 var completion_pending := false
 var _scroll: ScrollContainer
+var run_kind := "normal"
+var run_date := ""
+var date_override := ""
+var active_actions: Array = []
+var tutorial_step := 0
+var instructions_label: Label
+var feedback
+var _latest_result: Dictionary = {}
+var _settings_return := ""
+var _settings_lesson := ""
+var _last_autosave := 0
+var _last_date_check := 0
+var _home_day := ""
 
 func _ready() -> void:
 	theme = Theme.new()
@@ -53,6 +71,9 @@ func _ready() -> void:
 		return
 	levels = parsed
 	_load_progress()
+	feedback = Feedback.new()
+	add_child(feedback)
+	feedback.configure(records.settings)
 	var background := ColorRect.new()
 	background.name = "Background"
 	background.color = CREAM
@@ -83,10 +104,15 @@ func _ready() -> void:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		_stash_session()
 		get_tree().quit()
 	elif what == NOTIFICATION_WM_GO_BACK_REQUEST:
 		if screen_name == "home":
 			get_tree().quit()
+		elif screen_name == "settings" and not _settings_return.is_empty():
+			resume_saved(_settings_return)
+		elif screen_name == "settings" and not _settings_lesson.is_empty():
+			start_tutorial(_settings_lesson)
 		else:
 			show_home()
 	elif what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_APPLICATION_FOCUS_OUT:
@@ -95,6 +121,9 @@ func _notification(what: int) -> void:
 		else:
 			_app_unfocused = true
 		solve_clock.pause(Time.get_ticks_msec())
+		_stash_session()
+		if is_instance_valid(feedback):
+			feedback.stop()
 	elif what == NOTIFICATION_APPLICATION_RESUMED or what == NOTIFICATION_APPLICATION_FOCUS_IN:
 		if what == NOTIFICATION_APPLICATION_RESUMED:
 			_app_suspended = false
@@ -104,16 +133,30 @@ func _notification(what: int) -> void:
 			solve_clock.resume(Time.get_ticks_msec())
 
 func _process(_delta: float) -> void:
+	if screen_name == "home" and Time.get_ticks_msec() - _last_date_check >= 1000:
+		_last_date_check = Time.get_ticks_msec()
+		if _home_day != today():
+			show_home()
 	if screen_name == "game" and not completion_pending:
 		solve_clock.tick(Time.get_ticks_msec())
 		var tenth := int(solve_clock.elapsed_ms / 100)
 		if tenth != _timer_tenth:
 			_timer_tenth = tenth
 			_update_stats()
+		if Time.get_ticks_msec() - _last_autosave >= 5000:
+			_stash_session()
 
 func _update_stats() -> void:
 	if is_instance_valid(stats_label):
-		stats_label.text = "%s   /   Moves %d   /   Undo %d" % [SolveClock.format_time(solve_clock.elapsed_ms), attempt_moves, undo_count]
+		stats_label.text = "Practice   /   Moves %d" % attempt_moves if run_kind == "tutorial" else "%s   /   Moves %d   /   Undo %d" % [SolveClock.format_time(solve_clock.elapsed_ms), attempt_moves, undo_count]
+
+func today() -> String:
+	return date_override if not date_override.is_empty() else Time.get_date_string_from_system()
+
+func _best_for_run() -> Dictionary:
+	if run_kind == "daily":
+		return records.best_daily(run_date, mode)
+	return records.best(mode, level_index) if run_kind == "normal" else {}
 
 func _level_counts() -> Dictionary:
 	return {"parcel": levels.parcel.size(), "block": levels.block.size()}
@@ -178,8 +221,11 @@ func _button(text: String, callback: Callable, primary := false) -> Button:
 	return button
 
 func _clear_page() -> void:
+	_stash_session()
 	solve_clock.finish(Time.get_ticks_msec())
 	stats_label = null
+	instructions_label = null
+	status_label = null
 	completion_pending = false
 	for child in page.get_children():
 		page.remove_child(child)
@@ -212,6 +258,7 @@ func _header(tag: String) -> void:
 func show_home() -> void:
 	_clear_page()
 	screen_name = "home"
+	_home_day = today()
 	_header("A HAPPY LITTLE BREAK")
 	var welcome := HBoxContainer.new()
 	welcome.add_theme_constant_override("separation", 12)
@@ -224,9 +271,11 @@ func show_home() -> void:
 	page.add_child(welcome)
 	var player_row := HBoxContainer.new()
 	player_row.add_theme_constant_override("separation", 12)
-	player_row.add_child(_button("Player: " + records.current().name, show_players))
+	player_row.add_child(_button(records.current().name, show_players))
 	player_row.add_child(_button("Rankings", show_rankings))
+	player_row.add_child(_button("Settings", show_settings))
 	page.add_child(player_row)
+	_add_daily_card()
 	_add_game_card("parcel", "PARCEL SORT", "A bundle of joy.", "Happy mail needs a little help. Match the parcels and make room!", CORAL)
 	_add_game_card("block", "BLOCK EXIT", "Give pals a way out.", "A little nudge, a happy exit. Find the matching gate for each pal.", TEAL)
 	var completed: int = progress.parcel.size() + progress.block.size()
@@ -271,12 +320,22 @@ func _add_game_card(game_mode: String, eyebrow: String, title: String, descripti
 	preview.add_child(copy)
 	contents.add_child(preview)
 	var number: int = int(progress["last_" + game_mode])
-	var play := _button("Let's play!   /   Level %02d   >" % (number + 1), start_level.bind(game_mode, number), true)
+	var pending: Dictionary = records.current().sessions.get(game_mode, {})
+	var pending_level := Session.integer(pending.get("level"), 0, levels[game_mode].size() - 1)
+	var resume_available := not pending.is_empty() and pending_level >= 0
+	var play := _button(("Resume" if resume_available else "Play") + " level %02d   >" % ((pending_level if resume_available else number) + 1), open_game.bind(game_mode), true)
 	play.custom_minimum_size.y = 80
 	play.add_theme_stylebox_override("normal", _style(accent, 24, accent.lightened(0.15)))
 	play.add_theme_stylebox_override("hover", _style(accent.lightened(0.08)))
 	play.add_theme_stylebox_override("pressed", _style(accent.darkened(0.08)))
-	contents.add_child(play)
+	var play_row := HBoxContainer.new()
+	play_row.add_theme_constant_override("separation", 12)
+	play_row.add_child(play)
+	var learn := _button("Learn", start_tutorial.bind(game_mode))
+	learn.custom_minimum_size = Vector2(132, 80)
+	learn.size_flags_horizontal = Control.SIZE_SHRINK_END
+	play_row.add_child(learn)
+	contents.add_child(play_row)
 	panel.add_child(contents)
 	page.add_child(panel)
 
@@ -315,12 +374,17 @@ func show_levels(game_mode: String, page_number: int = -1) -> void:
 	page.add_child(navigation)
 	page.add_child(_button("Back to collection", show_home))
 
-func start_level(game_mode: String, number: int) -> void:
+func start_level(game_mode: String, number: int, kind: String = "normal", day: String = "") -> void:
 	_clear_page()
 	screen_name = "game"
 	mode = game_mode
+	run_kind = kind
+	run_date = day
 	level_index = clampi(number, 0, levels[mode].size() - 1)
-	progress["last_" + mode] = level_index
+	if run_kind == "normal":
+		progress["last_" + mode] = level_index
+	if run_kind != "tutorial":
+		records.current().sessions.erase(Session.key(run_kind, mode))
 	_save_progress()
 	rules = ParcelRules.new() if mode == "parcel" else BlockRules.new()
 	rules.setup(levels[mode][level_index])
@@ -328,17 +392,31 @@ func start_level(game_mode: String, number: int) -> void:
 	undo_count = 0
 	_run_recorded = false
 	_timer_tenth = -1
-	_header("PARCEL SORT" if mode == "parcel" else "BLOCK EXIT")
+	active_actions = []
+	tutorial_step = 0
+	_latest_result = {}
+	_header(("LEARN " if run_kind == "tutorial" else "DAILY JOY / " if run_kind == "daily" else "") + ("PARCEL SORT" if mode == "parcel" else "BLOCK EXIT"))
 	var nav := HBoxContainer.new()
 	nav.add_theme_constant_override("separation", 12)
 	var home_button := _button("< Home", show_home)
 	home_button.custom_minimum_size.x = 130
 	home_button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	nav.add_child(home_button)
-	nav.add_child(_button("LEVEL %02d / %d" % [level_index + 1, levels[mode].size()], show_levels.bind(mode)))
+	if run_kind == "tutorial":
+		nav.add_child(_button("Skip lesson >", start_level.bind(mode, 0)))
+	elif run_kind == "daily":
+		nav.add_child(_button(run_date, show_home))
+	else:
+		nav.add_child(_button("LEVEL %02d / %d" % [level_index + 1, levels[mode].size()], show_levels.bind(mode)))
+	var settings_button := _button("Settings", show_settings)
+	settings_button.custom_minimum_size.x = 126
+	settings_button.size_flags_horizontal = Control.SIZE_SHRINK_END
+	settings_button.add_theme_font_size_override("font_size", 20)
+	nav.add_child(settings_button)
 	page.add_child(nav)
 	page.add_child(_label("Let's send a little happiness!" if mode == "parcel" else "A little nudge. A happy exit.", 30))
-	page.add_child(_label("Tap a queue to send a parcel. Extras wait for their turn." if mode == "parcel" else "Tap a pal, then swipe or use the arrows. Find its matching gate!", 22, MUTED))
+	instructions_label = _label("Tap a queue to send a parcel. Extras wait for their turn." if mode == "parcel" else "Tap a pal, then swipe or use the arrows. Find its matching gate!", 22, MUTED)
+	page.add_child(instructions_label)
 	stats_label = _label("", 22, INK)
 	page.add_child(stats_label)
 	delivery_label = _label("", 20, TEAL)
@@ -356,7 +434,7 @@ func start_level(game_mode: String, number: int) -> void:
 	board.custom_minimum_size.y = 610 if mode == "parcel" else 540
 	board.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	board.played.connect(play_move)
-	board.selection_changed.connect(_update_arrows)
+	board.selection_changed.connect(_selection_changed)
 	page.add_child(board)
 	if mode == "block":
 		var arrows := HBoxContainer.new()
@@ -373,7 +451,7 @@ func start_level(game_mode: String, number: int) -> void:
 	actions.add_theme_constant_override("separation", 12)
 	undo_button = _button("Undo", undo_move)
 	actions.add_child(undo_button)
-	actions.add_child(_button("Restart", start_level.bind(mode, level_index)))
+	actions.add_child(_button("Restart", restart_run))
 	page.add_child(actions)
 	status_label = _label("Take your time, puzzle pal. You've got this!", 21, MUTED)
 	status_label.custom_minimum_size.y = 42
@@ -382,6 +460,37 @@ func start_level(game_mode: String, number: int) -> void:
 	if _app_suspended or _app_unfocused:
 		solve_clock.pause(Time.get_ticks_msec())
 	_refresh()
+	_refresh_guide()
+	_stash_session()
+
+func restart_run() -> void:
+	start_level(mode, level_index, run_kind, run_date)
+
+func open_game(game_mode: String) -> void:
+	if records.current().sessions.has(game_mode):
+		resume_saved(game_mode)
+	elif not records.current().tutorials[game_mode] and records.current().progress[game_mode].is_empty():
+		start_tutorial(game_mode)
+	else:
+		start_level(game_mode, int(progress["last_" + game_mode]))
+
+func start_tutorial(game_mode: String) -> void:
+	start_level(game_mode, Lesson.level_for(game_mode), "tutorial")
+
+func _selection_changed() -> void:
+	_update_arrows()
+	_stash_session()
+
+func _refresh_guide() -> void:
+	if run_kind != "tutorial" or board == null or rules.won():
+		return
+	var solution: Array = levels[mode][level_index].solution
+	instructions_label.text = Lesson.message(mode, tutorial_step, solution)
+	var expected: Array = Lesson.expected(mode, tutorial_step, solution)
+	board.guide_lane = int(expected[0]) if mode == "parcel" else -1
+	board.guide_piece = int(expected[0]) if mode == "block" else -1
+	board.queue_redraw()
+	_update_arrows()
 
 func _arrow_move(direction: Vector2i) -> void:
 	if board != null:
@@ -390,12 +499,23 @@ func _arrow_move(direction: Vector2i) -> void:
 func play_move(index: int, direction: Vector2i) -> void:
 	if screen_name != "game" or completion_pending:
 		return
+	if active_actions.size() >= Session.MAX_ACTIONS:
+		status_label.text = "That's a lot of nudges! Undo or restart for a fresh try."
+		return
+	if run_kind == "tutorial":
+		var expected: Array = Lesson.expected(mode, tutorial_step, levels[mode][level_index].solution)
+		if int(expected[0]) != index or (mode == "block" and direction != Vector2i(int(expected[1]), int(expected[2]))):
+			status_label.text = "Follow the glowing pal. You're doing great!"
+			return
 	var before: int = rules.delivered if mode == "parcel" else rules.remaining()
 	var accepted: bool = rules.send(index) if mode == "parcel" else rules.move_piece(index, direction)
 	if not accepted:
 		status_label.text = "A little crowded! Try a matching parcel, or undo." if mode == "parcel" else "Oops, a cozy squeeze! Try another way to the matching gate."
 		return
 	attempt_moves += 1
+	active_actions.append([index] if mode == "parcel" else [index, direction.x, direction.y])
+	if run_kind == "tutorial":
+		tutorial_step += 1
 	board.celebrate_move()
 	if mode == "parcel":
 		var count: int = rules.delivered - before
@@ -405,26 +525,40 @@ func play_move(index: int, direction: Vector2i) -> void:
 	else:
 		status_label.text = "Hooray! One happy pal is home." if rules.remaining() < before else "A little closer! Let's find that happy exit."
 	_refresh()
+	_refresh_guide()
+	var delivered: bool = rules.delivered > before if mode == "parcel" else rules.remaining() < before
+	feedback.play("deliver" if delivered else "move")
 	if rules.won():
 		solve_clock.finish(Time.get_ticks_msec())
 		_update_stats()
 		completion_pending = true
+		_commit_win()
+		feedback.play("win")
 		var current_board = board
 		await get_tree().create_timer(0.4).timeout
 		if screen_name == "game" and board == current_board and completion_pending:
 			show_result()
+	else:
+		_stash_session()
 
 func undo_move() -> void:
 	if screen_name != "game" or completion_pending:
 		return
 	if rules.undo():
 		undo_count += 1
+		if not active_actions.is_empty():
+			active_actions.pop_back()
+		if run_kind == "tutorial":
+			tutorial_step = maxi(0, tutorial_step - 1)
 		status_label.text = "A tiny rewind. A fresh possibility!"
 		board.queue_redraw()
 		_refresh()
+		_refresh_guide()
+		_stash_session()
+		feedback.play("undo")
 
 func _refresh() -> void:
-	var best: Dictionary = records.best(mode, level_index)
+	var best := _best_for_run()
 	var high: int = int(best.get("high_score", 0))
 	if mode == "parcel":
 		delivery_label.text = "%d / %d delivered   /   HIGH SCORE %d" % [rules.delivered, rules.route.size(), high]
@@ -435,6 +569,10 @@ func _refresh() -> void:
 		meter.max_value = rules.pieces.size()
 		meter.value = rules.pieces.size() - rules.remaining()
 	undo_button.disabled = rules.history.is_empty()
+	if run_kind != "normal":
+		delivery_label.text = delivery_label.text.replace("HIGH SCORE", "DAILY BEST" if run_kind == "daily" else "PRACTICE")
+	if run_kind == "tutorial":
+		delivery_label.text = "%d / %d parcels sent" % [rules.delivered, rules.route.size()] if mode == "parcel" else "Pals to guide: %d" % rules.remaining()
 	_update_stats()
 	_update_arrows()
 
@@ -444,20 +582,39 @@ func _update_arrows() -> void:
 	var directions := [Vector2i.LEFT, Vector2i.UP, Vector2i.DOWN, Vector2i.RIGHT]
 	for i in range(arrow_buttons.size()):
 		arrow_buttons[i].disabled = not rules.can_move(board.selected, directions[i])
+		if run_kind == "tutorial" and not rules.won():
+			var expected: Array = Lesson.expected(mode, tutorial_step, levels[mode][level_index].solution)
+			arrow_buttons[i].disabled = arrow_buttons[i].disabled or directions[i] != Vector2i(int(expected[1]), int(expected[2]))
 
-func show_result() -> void:
-	if screen_name != "game" or not rules.won() or _run_recorded:
+func _commit_win() -> void:
+	if _run_recorded:
 		return
 	_run_recorded = true
-	solve_clock.finish(Time.get_ticks_msec())
-	var result: Dictionary = records.record(mode, level_index, solve_clock.elapsed_ms, attempt_moves, undo_count)
-	if not progress[mode].has(level_index):
-		progress[mode].append(level_index)
-	progress["last_" + mode] = mini(level_index + 1, levels[mode].size() - 1)
+	if run_kind == "tutorial":
+		records.current().tutorials[mode] = true
+	elif run_kind == "daily":
+		_latest_result = records.record_daily(run_date, mode, solve_clock.elapsed_ms, attempt_moves, undo_count)
+	else:
+		_latest_result = records.record(mode, level_index, solve_clock.elapsed_ms, attempt_moves, undo_count)
+		if not progress[mode].has(level_index):
+			progress[mode].append(level_index)
+		progress["last_" + mode] = mini(level_index + 1, levels[mode].size() - 1)
+	if run_kind != "tutorial":
+		records.current().sessions.erase(Session.key(run_kind, mode))
 	_save_progress()
+
+func show_result() -> void:
+	if screen_name != "game" or not rules.won():
+		return
+	solve_clock.finish(Time.get_ticks_msec())
+	_commit_win()
+	if run_kind == "tutorial":
+		_show_lesson_complete()
+		return
+	var result := _latest_result
 	_clear_page()
 	screen_name = "result"
-	_header("A LITTLE VICTORY")
+	_header("DAILY JOY / " + run_date if run_kind == "daily" else "A LITTLE VICTORY")
 	page.add_child(_art("victory", Vector2(0, 145)))
 	var cheer := _label("You did it, puzzle pal!", 42, Look.PURPLE)
 	cheer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -470,9 +627,14 @@ func show_result() -> void:
 	page.add_child(score_card)
 	page.add_child(_label("Solved in %s   /   Moves %d   /   Undo %d" % [SolveClock.format_time(solve_clock.elapsed_ms), attempt_moves, undo_count], 23))
 	page.add_child(_label("Level best: %d points\nFastest: %s   /   Fewest moves: %d\nTimes solved: %d" % [result.best.high_score, SolveClock.format_time(int(result.best.best_time_ms)), result.best.fewest_moves, result.best.solves], 23, MUTED))
-	page.add_child(_label("%d / %d puzzles in your collection." % [progress.parcel.size() + progress.block.size(), _total_levels()], 22, MUTED))
-	page.add_child(_button("One more little puzzle   >" if level_index < levels[mode].size() - 1 else "Back to collection", start_level.bind(mode, level_index + 1) if level_index < levels[mode].size() - 1 else show_home, true))
-	page.add_child(_button("Say hello to the other game", start_level.bind("block" if mode == "parcel" else "parcel", 0)))
+	if run_kind == "daily":
+		page.add_child(_label("Your personal best for this day's puzzle. Regular rankings stay separate.", 21, MUTED))
+		page.add_child(_button("Today's other little puzzle >", open_daily.bind("block" if mode == "parcel" else "parcel"), true))
+		page.add_child(_button("Play regular puzzles", open_game.bind(mode)))
+	else:
+		page.add_child(_label("%d / %d puzzles in your collection." % [progress.parcel.size() + progress.block.size(), _total_levels()], 22, MUTED))
+		page.add_child(_button("One more little puzzle   >" if level_index < levels[mode].size() - 1 else "Back to collection", start_level.bind(mode, level_index + 1) if level_index < levels[mode].size() - 1 else show_home, true))
+		page.add_child(_button("Say hello to the other game", open_game.bind("block" if mode == "parcel" else "parcel")))
 	var options := HBoxContainer.new()
 	options.add_theme_constant_override("separation", 12)
 	options.add_child(_button("Pick a level", show_levels.bind(mode)))
@@ -561,20 +723,117 @@ func show_rankings(game_mode: String = "all") -> void:
 	page.add_child(_button("Switch player", show_players))
 	page.add_child(_button("Back to collection", show_home))
 
+func _add_daily_card() -> void:
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", _style(Color("fff5df"), 26, Color("efddb0")))
+	var contents := VBoxContainer.new()
+	contents.add_theme_constant_override("separation", 8)
+	contents.add_child(_label("Today's little joy   /   " + today(), 22, INK))
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 12)
+	for game_mode in ["parcel", "block"]:
+		var best: Dictionary = records.best_daily(today(), game_mode)
+		var title := "Parcel" if game_mode == "parcel" else "Block"
+		var text := title + (" / Best %d" % best.high_score if not best.is_empty() else " daily >")
+		var button := _button(text, open_daily.bind(game_mode))
+		button.custom_minimum_size.y = 72
+		button.add_theme_font_size_override("font_size", 21)
+		buttons.add_child(button)
+	contents.add_child(buttons)
+	panel.add_child(contents)
+	page.add_child(panel)
+
+func open_daily(game_mode: String) -> void:
+	var day := today()
+	var key := Session.key("daily", game_mode)
+	var pending: Dictionary = records.current().sessions.get(key, {})
+	if not pending.is_empty() and pending.get("day") == day:
+		resume_saved(key)
+		return
+	records.current().sessions.erase(key)
+	start_level(game_mode, Daily.level_for(day, game_mode, levels[game_mode].size()), "daily", day)
+
+func _stash_session() -> void:
+	if screen_name != "game" or rules == null or board == null or run_kind == "tutorial" or rules.won():
+		return
+	solve_clock.tick(Time.get_ticks_msec())
+	var key := Session.key(run_kind, mode)
+	var selected: int = board.selected if mode == "block" else -1
+	records.current().sessions[key] = Session.snapshot(mode, level_index, run_kind, run_date, int(levels[mode][level_index].seed), active_actions, solve_clock.elapsed_ms, attempt_moves, undo_count, selected)
+	_last_autosave = Time.get_ticks_msec()
+	_save_progress()
+
+func resume_saved(key: String) -> void:
+	var data: Dictionary = records.current().sessions.get(key, {})
+	var restored := Session.restore(data, levels)
+	if restored.is_empty():
+		records.current().sessions.erase(key)
+		_save_progress()
+		if key.begins_with("daily_"):
+			open_daily(key.trim_prefix("daily_"))
+		else:
+			start_level(key, int(progress["last_" + key]))
+		return
+	start_level(restored.mode, restored.level, restored.kind, restored.day)
+	rules = restored.rules
+	board.rules = rules
+	board.selected = restored.selected
+	active_actions = restored.actions
+	attempt_moves = restored.moves
+	undo_count = restored.undos
+	solve_clock.start(Time.get_ticks_msec())
+	solve_clock.elapsed_ms = restored.elapsed_ms
+	if _app_suspended or _app_unfocused:
+		solve_clock.pause(Time.get_ticks_msec())
+	_settings_return = ""
+	status_label.text = "Right where you left your pals. Welcome back!"
+	board.queue_redraw()
+	_refresh()
+	_stash_session()
+
+func _show_lesson_complete() -> void:
+	_clear_page()
+	screen_name = "result"
+	_header("READY, PUZZLE PAL?")
+	page.add_child(_art("victory", Vector2(0, 160)))
+	page.add_child(_label("You've got the hang of it!", 40, Look.PURPLE))
+	page.add_child(_label("Practice complete. Play a regular puzzle to start collecting scores and personal bests.", 24, MUTED))
+	page.add_child(_button("Let's play for real >", start_level.bind(mode, 0), true))
+	page.add_child(_button("Learn the other game", start_tutorial.bind("block" if mode == "parcel" else "parcel")))
+	page.add_child(_button("Back to our happy place", show_home))
+
+func show_settings() -> void:
+	if screen_name != "settings":
+		_settings_return = Session.key(run_kind, mode) if screen_name == "game" and run_kind != "tutorial" else ""
+		_settings_lesson = mode if screen_name == "game" and run_kind == "tutorial" else ""
+	_clear_page()
+	screen_name = "settings"
+	_header("YOUR COZY SETTINGS")
+	page.add_child(_label("Make yourself comfy.", 42))
+	page.add_child(_label("Gentle chimes and a tiny happy buzz. Choose what feels right for you.", 23, MUTED))
+	page.add_child(_button("Sound: " + ("On" if records.settings.sound else "Off"), _toggle_setting.bind("sound"), records.settings.sound))
+	page.add_child(_button("Vibration: " + ("On" if records.settings.vibration else "Off"), _toggle_setting.bind("vibration"), records.settings.vibration))
+	page.add_child(_button("Preview my settings", _preview_feedback))
+	page.add_child(_label("Vibration depends on your phone and its system settings. Your choices are saved for everyone on this device.", 21, MUTED))
+	if not _settings_return.is_empty():
+		page.add_child(_button("Back to my puzzle", resume_saved.bind(_settings_return), true))
+	elif not _settings_lesson.is_empty():
+		page.add_child(_button("Restart my lesson", start_tutorial.bind(_settings_lesson), true))
+	page.add_child(_button("Back to our happy place", show_home))
+
+func _toggle_setting(key: String) -> void:
+	records.settings[key] = not records.settings[key]
+	feedback.configure(records.settings)
+	_save_progress()
+	show_settings()
+
+func _preview_feedback() -> void:
+	feedback.play("deliver")
+
 func _load_progress() -> void:
-	var saved: Variant = {}
-	if not FileAccess.file_exists(save_path):
-		records.restore({}, _level_counts())
-	else:
-		var file := FileAccess.open(save_path, FileAccess.READ)
-		if file != null:
-			saved = JSON.parse_string(file.get_as_text())
-		records.restore(saved if saved is Dictionary else {}, _level_counts())
+	records.restore(Store.load_data(save_path), _level_counts())
 	progress = records.current().progress
 
 func _save_progress() -> void:
-	var file := FileAccess.open(save_path, FileAccess.WRITE)
-	if file != null:
-		file.store_string(JSON.stringify(records.to_data()))
-	else:
+	if not Store.save_data(save_path, records.to_data()):
 		push_warning("Local progress could not be saved")

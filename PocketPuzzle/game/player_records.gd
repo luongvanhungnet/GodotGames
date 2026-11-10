@@ -2,7 +2,10 @@ extends RefCounted
 ## Local player profiles and per-level records. Replays improve a record;
 ## they never add the same level's score to a ranking twice.
 const MAX_PLAYERS := 8
+const Daily = preload("res://game/daily_puzzle.gd")
+const Session = preload("res://game/run_session.gd")
 var players: Array = []
+var settings := {"sound": true, "vibration": false}
 var active_id := "p1"
 var _next_id := 2
 
@@ -10,7 +13,7 @@ func _init() -> void:
 	players = [_new_player("p1", "Player 1")]
 
 func _new_player(id: String, player_name: String) -> Dictionary:
-	return {"id": id, "name": player_name, "progress": {"parcel": [], "block": [], "last_parcel": 0, "last_block": 0}, "results": {"parcel": {}, "block": {}}}
+	return {"id": id, "name": player_name, "progress": {"parcel": [], "block": [], "last_parcel": 0, "last_block": 0}, "results": {"parcel": {}, "block": {}}, "daily_results": {}, "sessions": {}, "tutorials": {"parcel": false, "block": false}}
 
 func current() -> Dictionary:
 	for player in players:
@@ -69,8 +72,30 @@ func record(game_mode: String, level: int, milliseconds: int, moves: int, undos:
 	if not game_mode in ["parcel", "block"] or level < 0 or moves < 1 or milliseconds < 0 or undos < 0:
 		return {}
 	milliseconds = maxi(1, milliseconds)
-	var score := score_for(milliseconds, moves, undos)
 	var previous := best(game_mode, level)
+	var summary := _merge_record(previous, milliseconds, moves, undos)
+	current().results[game_mode][str(level)] = summary.best
+	return summary
+
+func best_daily(day: String, game_mode: String) -> Dictionary:
+	return current().daily_results.get(day, {}).get(game_mode, {})
+
+func record_daily(day: String, game_mode: String, milliseconds: int, moves: int, undos: int) -> Dictionary:
+	if not Daily.valid_date(day) or not game_mode in ["parcel", "block"] or milliseconds < 0 or moves < 1 or undos < 0:
+		return {}
+	var summary := _merge_record(best_daily(day, game_mode), maxi(1, milliseconds), moves, undos)
+	var days: Dictionary = current().daily_results
+	if not days.has(day):
+		days[day] = {}
+	days[day][game_mode] = summary.best
+	var dates := days.keys()
+	dates.sort()
+	while dates.size() > 90:
+		days.erase(dates.pop_front())
+	return summary
+
+func _merge_record(previous: Dictionary, milliseconds: int, moves: int, undos: int) -> Dictionary:
+	var score := score_for(milliseconds, moves, undos)
 	var is_high: bool = previous.is_empty() or score > int(previous.high_score)
 	var result := {"high_score": score, "best_time_ms": milliseconds, "fewest_moves": moves, "solves": 1}
 	if not previous.is_empty():
@@ -78,7 +103,6 @@ func record(game_mode: String, level: int, milliseconds: int, moves: int, undos:
 		result.best_time_ms = mini(milliseconds, int(previous.best_time_ms))
 		result.fewest_moves = mini(moves, int(previous.fewest_moves))
 		result.solves = int(previous.solves) + 1
-	current().results[game_mode][str(level)] = result
 	return {"score": score, "new_high": is_high, "best": result.duplicate()}
 
 func ranking(game_mode: String = "all") -> Array:
@@ -108,12 +132,17 @@ func ranking(game_mode: String = "all") -> Array:
 	return rows
 
 func to_data() -> Dictionary:
-	return {"version": 2, "active_player": active_id, "next_player_id": _next_id, "players": players.duplicate(true)}
+	return {"version": 3, "settings": settings.duplicate(), "active_player": active_id, "next_player_id": _next_id, "players": players.duplicate(true)}
 
 func restore(saved: Dictionary, counts: Dictionary) -> void:
 	players = []
 	active_id = "p1"
 	_next_id = 2
+	settings = {"sound": true, "vibration": false}
+	if saved.get("settings") is Dictionary:
+		for key in settings:
+			if saved.settings.get(key) is bool:
+				settings[key] = saved.settings[key]
 	if not saved.get("players") is Array:
 		var legacy := _new_player("p1", "Player 1")
 		legacy.progress = _read_progress(saved, counts)
@@ -138,6 +167,7 @@ func restore(saved: Dictionary, counts: Dictionary) -> void:
 		names[player_name.to_lower()] = true
 		var player := _new_player(id, player_name)
 		player.progress = _read_progress(item.get("progress", {}), counts)
+		_read_extras(item, player)
 		var results: Variant = item.get("results", {})
 		if results is Dictionary:
 			for game_mode in ["parcel", "block"]:
@@ -163,6 +193,41 @@ func restore(saved: Dictionary, counts: Dictionary) -> void:
 	active_id = str(saved.get("active_player", "p1"))
 	if not select_player(active_id):
 		active_id = players[0].id
+
+func _read_extras(item: Dictionary, player: Dictionary) -> void:
+	var tutorials: Variant = item.get("tutorials", {})
+	for game_mode in ["parcel", "block"]:
+		player.tutorials[game_mode] = tutorials.get(game_mode, not player.progress[game_mode].is_empty()) if tutorials is Dictionary else not player.progress[game_mode].is_empty()
+		if not player.tutorials[game_mode] is bool:
+			player.tutorials[game_mode] = false
+	var sessions: Variant = item.get("sessions", {})
+	if sessions is Dictionary:
+		for key in ["parcel", "block", "daily_parcel", "daily_block"]:
+			var session: Variant = sessions.get(key)
+			if session is Dictionary and session.get("actions") is Array and session.actions.size() <= Session.MAX_ACTIONS and session.get("kind") in ["normal", "daily"] and session.get("mode") in ["parcel", "block"] and key == Session.key(session.kind, session.mode):
+				player.sessions[key] = session.duplicate(true)
+	var days: Variant = item.get("daily_results", {})
+	if not days is Dictionary:
+		return
+	var dates: Array = []
+	for day in days:
+		if day is String and Daily.valid_date(day) and days[day] is Dictionary:
+			dates.append(day)
+	dates.sort()
+	for day in dates.slice(maxi(0, dates.size() - 90)):
+		var results := {}
+		for game_mode in ["parcel", "block"]:
+			var entry: Variant = days[day].get(game_mode)
+			if not entry is Dictionary:
+				continue
+			var score := _integer(entry.get("high_score"), 1000, 6000)
+			var time := _integer(entry.get("best_time_ms"), 1, 604800000)
+			var moves := _integer(entry.get("fewest_moves"), 1, 1000000)
+			var solves := _integer(entry.get("solves"), 1, 1000000)
+			if score >= 0 and time >= 0 and moves >= 0 and solves >= 0:
+				results[game_mode] = {"high_score": score, "best_time_ms": time, "fewest_moves": moves, "solves": solves}
+		if not results.is_empty():
+			player.daily_results[day] = results
 
 func _read_progress(value: Variant, counts: Dictionary) -> Dictionary:
 	var result: Dictionary = _new_player("", "").progress

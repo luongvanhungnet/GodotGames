@@ -10,6 +10,10 @@ func _run() -> void:
 	DisplayServer.window_set_size(Vector2i(720, 1280))
 	var screen = load("res://node_2d.tscn").instantiate()
 	screen.save_path = "user://pocketpuzzle-capture-progress.json"
+	screen.date_override = "2026-11-11"
+	for suffix in ["", ".bak", ".tmp"]:
+		if FileAccess.file_exists(screen.save_path + suffix):
+			DirAccess.remove_absolute(screen.save_path + suffix)
 	root.add_child(screen)
 	DirAccess.make_dir_recursive_absolute("res://builds")
 	await _capture("home")
@@ -34,9 +38,18 @@ func _run() -> void:
 	await _capture("players")
 	screen.show_levels("parcel", 0)
 	await _capture("levels")
+	screen.open_daily("parcel")
+	await _capture("daily")
+	screen.start_tutorial("parcel")
+	await _capture("learn-parcel")
+	screen.start_tutorial("block")
+	await _capture("learn-block")
+	screen.show_settings()
+	await _capture("settings")
 	screen.queue_free()
 	await process_frame
-	DirAccess.remove_absolute("user://pocketpuzzle-capture-progress.json")
+	for suffix in ["", ".bak", ".tmp"]:
+		DirAccess.remove_absolute("user://pocketpuzzle-capture-progress.json" + suffix)
 	quit()
 
 func _capture(label: String) -> void:

@@ -9,6 +9,8 @@ puzzles. The chooser has five pages per game. Every level has a checked solution
 The solve timer starts when the level opens and stops on the final winning move.
 Thinking time counts. Time spent while the app is in the background or unfocused
 does not count. The victory animation is excluded. Restart creates a fresh attempt.
+Resuming an unfinished game preserves its active solve time and move/undo counts;
+time spent with the app closed or in menus is excluded.
 The display uses minutes, seconds, and tenths of a second.
 
 The move counter counts every accepted move in the attempt, including moves later
@@ -54,6 +56,11 @@ An old completion save becomes Player 1's progress automatically. Historical
 completions remain marked as done, and the next-level selection is preserved.
 Old versions did not record time or score, so those levels receive scored records
 when replayed. The update does not invent historical scores.
+
+In build 0.5, guided lessons are unranked. Daily Joy has the same score formula and
+separate per-date personal bests. Daily solves do not add regular completion stars
+or points to the regular player rankings. A winning result is saved immediately,
+before its celebration animation begins.
 
 ## Validation
 

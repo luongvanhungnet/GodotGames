@@ -12,6 +12,8 @@ const LANE := Color("f0e9f8")
 var mode := "parcel"
 var rules
 var selected := -1
+var guide_lane := -1
+var guide_piece := -1
 var press_position := Vector2.ZERO
 var flash := 0.0
 var _font: Font
@@ -113,7 +115,9 @@ func _draw_parcel() -> void:
 	var lane_width := (width - 32.0) / 3.0
 	for lane in range(3):
 		var rect := Rect2(lane * (lane_width + 16), 296, lane_width, size.y - 300)
-		_box(rect, [Color("fbecef"), Color("edf2fc"), Color("eaf5ee")][lane], 24, Color("e4dcec"))
+		_box(rect, [Color("fbecef"), Color("edf2fc"), Color("eaf5ee")][lane], 24, Look.PURPLE if lane == guide_lane else Color("e4dcec"))
+		if lane == guide_lane:
+			Art.star(self, rect.position + Vector2(rect.size.x - 14, -10), 10, Look.PURPLE)
 		var queue: Array = rules.queues[lane]
 		var gap := minf(44.0, (rect.size.y - 52.0) / maxf(1.0, queue.size()))
 		if queue.is_empty():
@@ -161,7 +165,7 @@ func _draw_block() -> void:
 			continue
 		var rect := Rect2(grid.position + Vector2(piece.x, piece.y) * cell + Vector2.ONE * 6, Vector2(piece.w, piece.h) * cell - Vector2.ONE * 12)
 		_box(Rect2(rect.position + Vector2(0, 6), rect.size), COLORS[int(piece.color)].darkened(0.12), 22)
-		_box(rect, COLORS[int(piece.color)].lightened(flash * 0.12 if selected == i else 0), 22, Look.PURPLE if selected == i else Color.TRANSPARENT)
+		_box(rect, COLORS[int(piece.color)].lightened(flash * 0.12 if selected == i else 0), 22, Look.PURPLE if selected == i or guide_piece == i else Color.TRANSPARENT)
 		var badge := Vector2(rect.get_center().x, rect.position.y + 21)
 		draw_circle(badge, 13, Color(1, 1, 1, 0.66))
 		_symbol(badge, int(piece.color), 8, Look.MARKS[int(piece.color)])

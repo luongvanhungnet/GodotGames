@@ -26,8 +26,9 @@ func _run() -> void:
 		return
 	var screen := scene.instantiate()
 	screen.save_path = "user://pocketpuzzle-smoke-progress.json"
-	if FileAccess.file_exists(screen.save_path):
-		DirAccess.remove_absolute(screen.save_path)
+	for suffix in ["", ".bak", ".tmp"]:
+		if FileAccess.file_exists(screen.save_path + suffix):
+			DirAccess.remove_absolute(screen.save_path + suffix)
 	root.add_child(screen)
 	var background := screen.get_node_or_null("Background") as ColorRect
 	if not screen is Control or background == null or screen.levels.is_empty() or screen.screen_name != "home":
@@ -99,7 +100,8 @@ func _run() -> void:
 	screen.show_home()
 	screen.queue_free()
 	await process_frame
-	DirAccess.remove_absolute("user://pocketpuzzle-smoke-progress.json")
+	for suffix in ["", ".bak", ".tmp"]:
+		DirAccess.remove_absolute("user://pocketpuzzle-smoke-progress.json" + suffix)
 	print("PASS: both games, solve statistics, rankings, 150-level choosers, win flow, and saved records")
 	quit(0)
 
