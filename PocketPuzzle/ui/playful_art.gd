@@ -3,11 +3,12 @@ extends Control
 const Look = preload("res://ui/friendly_theme.gd")
 var kind := "parcel"
 var variant := 0
+var reduced_motion := false
 var _time := 0.0
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	if kind != "victory":
+	if kind != "victory" or reduced_motion:
 		set_process(false)
 	resized.connect(queue_redraw)
 

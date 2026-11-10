@@ -13,6 +13,7 @@ const Session = preload("res://game/run_session.gd")
 const Store = preload("res://game/save_store.gd")
 const Lesson = preload("res://game/tutorial.gd")
 const Feedback = preload("res://ui/feedback.gd")
+const Hint = preload("res://game/puzzle_hint.gd")
 const INK := Look.INK
 const MUTED := Look.MUTED
 const CREAM := Look.BACKGROUND
@@ -40,6 +41,7 @@ var status_label: Label
 var delivery_label: Label
 var meter: ProgressBar
 var undo_button: Button
+var hint_button: Button
 var arrow_buttons: Array[Button] = []
 var screen_name := "home"
 var completion_pending := false
@@ -178,6 +180,7 @@ func _meter_style(color: Color) -> StyleBoxFlat:
 func _art(kind: String, minimum: Vector2) -> Control:
 	var art = Art.new()
 	art.kind = kind
+	art.reduced_motion = records.settings.reduced_motion
 	art.custom_minimum_size = minimum
 	art.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	return art
@@ -431,6 +434,8 @@ func start_level(game_mode: String, number: int, kind: String = "normal", day: S
 	board.name = "PuzzleBoard"
 	board.mode = mode
 	board.rules = rules
+	board.reduced_motion = records.settings.reduced_motion
+	board.clear_symbols = records.settings.clear_symbols
 	board.custom_minimum_size.y = 610 if mode == "parcel" else 540
 	board.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	board.played.connect(play_move)
@@ -451,6 +456,9 @@ func start_level(game_mode: String, number: int, kind: String = "normal", day: S
 	actions.add_theme_constant_override("separation", 12)
 	undo_button = _button("Undo", undo_move)
 	actions.add_child(undo_button)
+	hint_button = _button("Hint", show_hint)
+	hint_button.disabled = run_kind == "tutorial"
+	actions.add_child(hint_button)
 	actions.add_child(_button("Restart", restart_run))
 	page.add_child(actions)
 	status_label = _label("Take your time, puzzle pal. You've got this!", 21, MUTED)
@@ -496,6 +504,36 @@ func _arrow_move(direction: Vector2i) -> void:
 	if board != null:
 		play_move(board.selected, direction)
 
+func _clear_hint() -> void:
+	if board != null and run_kind != "tutorial":
+		board.guide_lane = -1
+		board.guide_piece = -1
+		board.queue_redraw()
+
+func show_hint() -> void:
+	if screen_name != "game" or completion_pending or run_kind == "tutorial":
+		return
+	_clear_hint()
+	var suggestion := Hint.suggest(mode, levels[mode][level_index], rules)
+	if suggestion.is_empty():
+		status_label.text = "No hint here yet. Try undo, or a fresh start."
+	elif suggestion.kind == "undo":
+		status_label.text = "Undo %d move%s to return to a known route. Undo still affects your score." % [suggestion.count, "" if suggestion.count == 1 else "s"]
+	else:
+		var action: Array = suggestion.action
+		if mode == "parcel":
+			board.guide_lane = action[0]
+			status_label.text = "Try the highlighted %s queue. Hints are free!" % ["left", "middle", "right"][int(action[0])]
+		else:
+			board.guide_piece = action[0]
+			board.selected = action[0]
+			var direction := Vector2i(action[1], action[2])
+			var word := "left" if direction == Vector2i.LEFT else "right" if direction == Vector2i.RIGHT else "up" if direction == Vector2i.UP else "down"
+			status_label.text = "Try moving the highlighted pal one step %s. Hints are free!" % word
+			_update_arrows()
+			_stash_session()
+	board.queue_redraw()
+
 func play_move(index: int, direction: Vector2i) -> void:
 	if screen_name != "game" or completion_pending:
 		return
@@ -512,6 +550,7 @@ func play_move(index: int, direction: Vector2i) -> void:
 	if not accepted:
 		status_label.text = "A little crowded! Try a matching parcel, or undo." if mode == "parcel" else "Oops, a cozy squeeze! Try another way to the matching gate."
 		return
+	_clear_hint()
 	attempt_moves += 1
 	active_actions.append([index] if mode == "parcel" else [index, direction.x, direction.y])
 	if run_kind == "tutorial":
@@ -535,7 +574,7 @@ func play_move(index: int, direction: Vector2i) -> void:
 		_commit_win()
 		feedback.play("win")
 		var current_board = board
-		await get_tree().create_timer(0.4).timeout
+		await get_tree().create_timer(0.01 if records.settings.reduced_motion else 0.4).timeout
 		if screen_name == "game" and board == current_board and completion_pending:
 			show_result()
 	else:
@@ -545,6 +584,7 @@ func undo_move() -> void:
 	if screen_name != "game" or completion_pending:
 		return
 	if rules.undo():
+		_clear_hint()
 		undo_count += 1
 		if not active_actions.is_empty():
 			active_actions.pop_back()
@@ -813,6 +853,9 @@ func show_settings() -> void:
 	page.add_child(_label("Gentle chimes and a tiny happy buzz. Choose what feels right for you.", 23, MUTED))
 	page.add_child(_button("Sound: " + ("On" if records.settings.sound else "Off"), _toggle_setting.bind("sound"), records.settings.sound))
 	page.add_child(_button("Vibration: " + ("On" if records.settings.vibration else "Off"), _toggle_setting.bind("vibration"), records.settings.vibration))
+	page.add_child(_button("Reduced motion: " + ("On" if records.settings.reduced_motion else "Off"), _toggle_setting.bind("reduced_motion"), records.settings.reduced_motion))
+	page.add_child(_button("Number symbols: " + ("On" if records.settings.clear_symbols else "Off"), _toggle_setting.bind("clear_symbols"), records.settings.clear_symbols))
+	page.add_child(_label("Reduced motion keeps pals still. Number symbols match parcels, pals and gates using 1 to 4.", 21, MUTED))
 	page.add_child(_button("Preview my settings", _preview_feedback))
 	page.add_child(_label("Vibration depends on your phone and its system settings. Your choices are saved for everyone on this device.", 21, MUTED))
 	if not _settings_return.is_empty():

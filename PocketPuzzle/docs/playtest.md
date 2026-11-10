@@ -1,4 +1,4 @@
-# PocketPuzzle playtest build 0.5.0
+# PocketPuzzle playtest build 0.6.0
 
 This build compares two playable 2D puzzle ideas. It is an offline prototype for
 testing enjoyment, clarity, and difficulty. Revenue and retention are unmeasured.
@@ -19,6 +19,9 @@ local progress and settings.
 first opening a regular game. **Daily Joy** chooses one existing puzzle per game
 for the local date and stores separate daily personal bests. Settings controls
 gentle sound effects and optional vibration. See `daily-joy.md` for details.
+Settings also offers reduced motion and numbered matching symbols. **Hint**
+highlights a verified next move or suggests undo steps back to a known route.
+Hints are free and do not make moves. See `comfort.md` for limits and controls.
 
 Completed levels display a star. Parcel and block pals carry the same identifying
 symbols as their deliveries or gates. Pastel colors, smiling characters, and brief

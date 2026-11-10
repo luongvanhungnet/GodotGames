@@ -16,6 +16,8 @@ var guide_lane := -1
 var guide_piece := -1
 var press_position := Vector2.ZERO
 var flash := 0.0
+var reduced_motion := false
+var clear_symbols := false
 var _font: Font
 
 func _ready() -> void:
@@ -24,6 +26,11 @@ func _ready() -> void:
 	set_process(false)
 
 func celebrate_move() -> void:
+	if reduced_motion:
+		flash = 0.0
+		set_process(false)
+		queue_redraw()
+		return
 	flash = 1.0
 	set_process(true)
 	queue_redraw()
@@ -46,6 +53,13 @@ func _text(value: String, point: Vector2, font_size: int, color: Color = INK, ce
 	draw_string(_font, point, value, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
 
 func _symbol(center: Vector2, index: int, extent: float, tint := Color.WHITE) -> void:
+	if clear_symbols:
+		var radius := maxf(10, extent + 2)
+		draw_circle(center, radius, PAPER)
+		draw_arc(center, radius, 0, TAU, 24, INK, 1.5, true)
+		var font_size := int(radius * 1.65)
+		_text(str(index + 1), center + Vector2(0, font_size * 0.34), font_size, INK, true)
+		return
 	match index:
 		0:
 			draw_circle(center, extent * 0.63, tint)

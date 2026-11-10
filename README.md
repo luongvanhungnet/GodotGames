@@ -24,6 +24,9 @@ guided **Learn** lessons, quiet sound effects, optional vibration, and device-wi
 sound/vibration settings. Unfinished regular and daily games resume with their
 board, undo history, counters, and active solve time. See the [Daily Joy guide](PocketPuzzle/docs/daily-joy.md).
 See the [playtest guide](PocketPuzzle/docs/playtest.md) for controls and comparison tasks.
+Build 0.6 adds free **Hint** guidance, optional **Reduced motion**, and high-contrast
+**Number symbols**. See [comfort and hints](PocketPuzzle/docs/comfort.md) for behavior
+and validation limits.
 
 ## Local
 The Git repository root is `D:\GodotGames`; the Godot project is `PocketPuzzle/`.
@@ -46,6 +49,7 @@ Run project commands from the project directory:
     godot --headless --path . --script tests/gameplay.gd
     godot --headless --path . --script tests/records.gd
     godot --headless --path . --script tests/daily_joy.gd
+    godot --headless --path . --script tests/comfort.gd
     godot --headless --path . --quit-after 5
 
 Regenerate levels with `python tools/generate_levels.py`, then rerun all test suites.

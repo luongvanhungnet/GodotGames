@@ -46,6 +46,14 @@ func _run() -> void:
 	await _capture("learn-block")
 	screen.show_settings()
 	await _capture("settings")
+	screen._toggle_setting("reduced_motion")
+	screen._toggle_setting("clear_symbols")
+	await _capture("comfort-settings")
+	for game_mode in ["parcel", "block"]:
+		screen.start_level(game_mode, 14)
+		screen.show_hint()
+		await _capture("comfort-" + game_mode)
+		print("COMFORT LAYOUT %s: content=%s viewport=%s" % [game_mode, screen.page.size, root.get_visible_rect().size])
 	screen.queue_free()
 	await process_frame
 	for suffix in ["", ".bak", ".tmp"]:

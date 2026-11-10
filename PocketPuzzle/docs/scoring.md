@@ -6,6 +6,10 @@ puzzles. The chooser has five pages per game. Every level has a checked solution
 
 ## Time and moves
 
+Build 0.6 hints are free. Asking for guidance does not increment moves or undo,
+pause the timer, or reduce scores. Following an undo suggestion uses the ordinary
+Undo button and its usual penalty. Local rankings include solves made with hints.
+
 The solve timer starts when the level opens and stops on the final winning move.
 Thinking time counts. Time spent while the app is in the background or unfocused
 does not count. The victory animation is excluded. Restart creates a fresh attempt.
