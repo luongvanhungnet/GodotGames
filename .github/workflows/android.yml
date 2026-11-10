@@ -1,0 +1,54 @@
+name: Android debug build
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: PocketPuzzle
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android build tools
+        run: sdkmanager 'platform-tools' 'platforms;android-35' 'build-tools;35.0.1'
+      - name: Install engine and run checks
+        run: bash scripts/cloud-setup.sh
+      - name: Install matching export templates
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(tr -d '\r\n' < .godot-version)
+          curl -fL --retry 3 "https://github.com/godotengine/godot/releases/download/${VERSION}-stable/Godot_v${VERSION}-stable_export_templates.tpz" -o /tmp/templates.zip
+          unzip -q /tmp/templates.zip -d /tmp/godot-templates
+          mkdir -p "$HOME/.local/share/godot/export_templates/${VERSION}.stable"
+          cp -a /tmp/godot-templates/templates/. "$HOME/.local/share/godot/export_templates/${VERSION}.stable/"
+      - name: Configure Android export
+        shell: bash
+        run: |
+          mkdir -p "$HOME/.config/godot" "$HOME/.android" builds
+          keytool -genkeypair -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -dname 'CN=Android Debug,O=Android,C=US' -keyalg RSA -keysize 2048 -validity 10000
+          printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/android_sdk_path = "%s"\nexport/android/java_sdk_path = "%s"\nexport/android/debug_keystore = "%s/.android/debug.keystore"\nexport/android/debug_keystore_user = "androiddebugkey"\nexport/android/debug_keystore_pass = "android"\n' "$ANDROID_HOME" "$JAVA_HOME" "$HOME" > "$HOME/.config/godot/editor_settings-4.7.tres"
+      - name: Export debug APK
+        env:
+          GODOT_ANDROID_KEYSTORE_DEBUG_USER: androiddebugkey
+          GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
+        shell: bash
+        run: |
+          export GODOT_ANDROID_KEYSTORE_DEBUG_PATH="$HOME/.android/debug.keystore"
+          .godot/cloud-tools/godot --headless --path . --export-debug Android builds/PocketPuzzle-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PocketPuzzle-debug
+          path: PocketPuzzle/builds/PocketPuzzle-debug.apk
+          if-no-files-found: error

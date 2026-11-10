@@ -1,0 +1,9 @@
+.godot/
+PocketPuzzle/android/
+PocketPuzzle/builds/
+.setup-backup/
+.env
+.env.*
+*.keystore
+*.jks
+.godot/export_credentials.cfg
