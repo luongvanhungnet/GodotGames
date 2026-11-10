@@ -13,6 +13,11 @@ func _run() -> void:
 	root.add_child(screen)
 	DirAccess.make_dir_recursive_absolute("res://builds")
 	await _capture("home")
+	screen.start_level("parcel", 0)
+	for action in screen.levels.parcel[0].solution:
+		screen.play_move(int(action), Vector2i.ZERO)
+	await create_timer(0.55).timeout
+	await _capture("victory")
 	for game_mode in ["parcel", "block"]:
 		for number in [0, screen.levels[game_mode].size() - 1]:
 			screen.start_level(game_mode, number)
@@ -27,6 +32,8 @@ func _run() -> void:
 	await _capture("rankings")
 	screen.show_players()
 	await _capture("players")
+	screen.show_levels("parcel", 0)
+	await _capture("levels")
 	screen.queue_free()
 	await process_frame
 	DirAccess.remove_absolute("user://pocketpuzzle-capture-progress.json")

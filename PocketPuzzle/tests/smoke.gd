@@ -67,6 +67,10 @@ func _run() -> void:
 		if screen.screen_name != "levels":
 			_fail("Level chooser did not open")
 			return
+		var grids: Array[Node] = screen.page.find_children("*", "GridContainer", true, false)
+		if grids.size() != 1 or grids[0].get_child_count() != 30:
+			_fail("Level chooser did not build its complete page")
+			return
 		screen.show_levels(game_mode, 4)
 		await process_frame
 		screen.start_level(game_mode, 149)

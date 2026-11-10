@@ -1,4 +1,4 @@
-# PocketPuzzle playtest build 0.3.0
+# PocketPuzzle playtest build 0.4.0
 
 This build compares two playable 2D puzzle ideas. It is an offline prototype for
 testing enjoyment, clarity, and difficulty. Revenue and retention are unmeasured.
@@ -11,6 +11,10 @@ restores a full move, Restart resets the current puzzle, and Android Back return
 to the collection. Completion, solve records, and the next level are saved locally
 for each named player. An unfinished
 board restarts when the app is relaunched. Uninstalling the app removes its progress.
+
+Completed levels display a star. Parcel and block pals carry the same identifying
+symbols as their deliveries or gates. Pastel colors, smiling characters, and brief
+celebrations add feedback while the puzzle rules and score formula stay the same.
 
 ### Parcel Sort
 

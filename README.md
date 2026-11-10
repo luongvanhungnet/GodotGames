@@ -16,6 +16,8 @@ fewest-move records are saved for up to eight named players on one device.
 Open **Rankings** on the collection screen to compare total best scores across
 all games or filter to Parcel Sort / Block Exit. Rankings are local to this device.
 See [scoring and rankings](PocketPuzzle/docs/scoring.md) for the rules.
+The interface uses pastel colors, smiling parcel/block pals, rounded controls,
+star badges, and a short victory celebration. See the [visual guide and previews](PocketPuzzle/docs/design.md).
 The game works offline without ads, purchases, accounts, or analytics.
 See the [playtest guide](PocketPuzzle/docs/playtest.md) for controls and comparison tasks.
 
