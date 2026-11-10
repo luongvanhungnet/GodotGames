@@ -14,6 +14,8 @@ const Store = preload("res://game/save_store.gd")
 const Lesson = preload("res://game/tutorial.gd")
 const Feedback = preload("res://ui/feedback.gd")
 const Hint = preload("res://game/puzzle_hint.gd")
+const Journey = preload("res://game/journey.gd")
+const StickerArt = preload("res://ui/sticker_art.gd")
 const INK := Look.INK
 const MUTED := Look.MUTED
 const CREAM := Look.BACKGROUND
@@ -59,6 +61,8 @@ var _settings_lesson := ""
 var _last_autosave := 0
 var _last_date_check := 0
 var _home_day := ""
+var _new_stickers: Array = []
+var _new_achievements: Array = []
 
 func _ready() -> void:
 	theme = Theme.new()
@@ -102,6 +106,7 @@ func _ready() -> void:
 	page.add_theme_constant_override("separation", 12)
 	margin.add_child(page)
 	get_tree().auto_accept_quit = false
+	get_tree().quit_on_go_back = false
 	show_home()
 
 func _notification(what: int) -> void:
@@ -183,6 +188,25 @@ func _art(kind: String, minimum: Vector2) -> Control:
 	art.reduced_motion = records.settings.reduced_motion
 	art.custom_minimum_size = minimum
 	art.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	return art
+
+func _sticker(id: String, minimum: Vector2, locked := false) -> Control:
+	var art = StickerArt.new()
+	var definition := Journey.definition(id)
+	art.kind = definition.get("art", "medal")
+	for index in range(Journey.STICKERS.size()):
+		if Journey.STICKERS[index].id == id:
+			art.variant = index
+	art.locked = locked
+	art.custom_minimum_size = minimum
+	art.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	return art
+
+func _avatar(id: String, minimum: Vector2, variant := 0) -> Control:
+	if not id.is_empty():
+		return _sticker(id, minimum)
+	var art = _art("avatar", minimum)
+	art.variant = variant
 	return art
 
 func _label(text: String, font_size := 24, color := INK) -> Label:
@@ -270,7 +294,7 @@ func show_home() -> void:
 	greeting.add_child(_label("Little puzzles,\nbig smiles.", 46))
 	greeting.add_child(_label("Pick a pal. Find your happy place.", 22, MUTED))
 	welcome.add_child(greeting)
-	welcome.add_child(_art("welcome", Vector2(138, 145)))
+	welcome.add_child(_art("welcome", Vector2(138, 145)) if records.current().journey.avatar.is_empty() else _avatar(records.current().journey.avatar, Vector2(138, 145)))
 	page.add_child(welcome)
 	var player_row := HBoxContainer.new()
 	player_row.add_theme_constant_override("separation", 12)
@@ -281,7 +305,7 @@ func show_home() -> void:
 	_add_daily_card()
 	_add_game_card("parcel", "PARCEL SORT", "A bundle of joy.", "Happy mail needs a little help. Match the parcels and make room!", CORAL)
 	_add_game_card("block", "BLOCK EXIT", "Give pals a way out.", "A little nudge, a happy exit. Find the matching gate for each pal.", TEAL)
-	var completed: int = progress.parcel.size() + progress.block.size()
+	var completed: int = Journey.metrics(records.current()).total
 	var collection := PanelContainer.new()
 	collection.add_theme_stylebox_override("panel", _style(PAPER))
 	var contents := VBoxContainer.new()
@@ -300,6 +324,12 @@ func show_home() -> void:
 	bar.add_theme_stylebox_override("background", _meter_style(Color("eee5f7")))
 	bar.add_theme_stylebox_override("fill", _meter_style(Color("b99cdc")))
 	contents.add_child(bar)
+	contents.add_child(_label(Journey.next_goal(records.current()), 22, Look.PURPLE))
+	var rewards := HBoxContainer.new()
+	rewards.add_theme_constant_override("separation", 12)
+	rewards.add_child(_button("Journey maps", show_journey.bind("parcel")))
+	rewards.add_child(_button("Sticker album %d/20" % Journey.earned_ids(records.current()).size(), show_album))
+	contents.add_child(rewards)
 	collection.add_child(contents)
 	page.add_child(collection)
 	var footer := _label("A cozy little break. Offline, ad-free, and all yours.", 18, MUTED)
@@ -334,8 +364,14 @@ func _add_game_card(game_mode: String, eyebrow: String, title: String, descripti
 	var play_row := HBoxContainer.new()
 	play_row.add_theme_constant_override("separation", 12)
 	play_row.add_child(play)
+	var map_button := _button("Map", show_journey.bind(game_mode))
+	map_button.custom_minimum_size = Vector2(96, 80)
+	map_button.size_flags_horizontal = Control.SIZE_SHRINK_END
+	map_button.add_theme_font_size_override("font_size", 20)
+	play_row.add_child(map_button)
 	var learn := _button("Learn", start_tutorial.bind(game_mode))
-	learn.custom_minimum_size = Vector2(132, 80)
+	learn.custom_minimum_size = Vector2(100, 80)
+	learn.add_theme_font_size_override("font_size", 20)
 	learn.size_flags_horizontal = Control.SIZE_SHRINK_END
 	play_row.add_child(learn)
 	contents.add_child(play_row)
@@ -350,13 +386,15 @@ func show_levels(game_mode: String, page_number: int = -1) -> void:
 	page.add_child(_label("Parcel Sort" if mode == "parcel" else "Block Exit", 46))
 	var count: int = levels[mode].size()
 	var current_page := clampi(int(level_index / 30) if page_number < 0 else page_number, 0, int((count - 1) / 30))
-	page.add_child(_label("%d little adventures. Collect a star for every solve!" % count, 22, MUTED))
+	page.add_child(_label("Chapter %d / %s" % [current_page + 1, Journey.CHAPTERS[mode][current_page]], 25, Look.PURPLE))
+	page.add_child(_label("%d little adventures. Every level is open!" % count, 22, MUTED))
+	var completed := Journey.completed(records.current(), mode)
 	var grid := GridContainer.new()
 	grid.columns = 5
 	grid.add_theme_constant_override("h_separation", 12)
 	grid.add_theme_constant_override("v_separation", 12)
 	for i in range(current_page * 30, mini(current_page * 30 + 30, count)):
-		var done: bool = progress[mode].has(i)
+		var done: bool = completed.has(i)
 		var button := _button("%02d" % (i + 1), start_level.bind(mode, i))
 		button.add_theme_stylebox_override("normal", _style(Color("def0e5") if done else PAPER, 24, Color("b8d8c7") if done else Color("e9e0f2")))
 		if done:
@@ -375,7 +413,126 @@ func show_levels(game_mode: String, page_number: int = -1) -> void:
 	next.disabled = (current_page + 1) * 30 >= count
 	navigation.add_child(next)
 	page.add_child(navigation)
-	page.add_child(_button("Back to collection", show_home))
+	page.add_child(_button("Back to journey", show_journey.bind(mode)))
+
+func show_journey(game_mode: String = "parcel") -> void:
+	_clear_page()
+	screen_name = "journey"
+	mode = game_mode
+	_header("YOUR PUZZLE JOURNEY")
+	var navigation := HBoxContainer.new()
+	navigation.add_theme_constant_override("separation", 12)
+	navigation.add_child(_button("< Home", show_home))
+	navigation.add_child(_button("Parcel" if mode == "block" else "Block", show_journey.bind("parcel" if mode == "block" else "block")))
+	page.add_child(navigation)
+	page.add_child(_label("Your %s journey." % ("Parcel" if mode == "parcel" else "Block"), 36))
+	page.add_child(_label("Five cozy chapters. Every puzzle is open.", 22, MUTED))
+	for chapter in range(5):
+		var margin := MarginContainer.new()
+		margin.add_theme_constant_override("margin_left" if chapter % 2 == 1 else "margin_right", 40)
+		var panel := PanelContainer.new()
+		panel.name = "Chapter%d" % chapter
+		panel.add_theme_stylebox_override("panel", _style(Look.PASTELS[chapter % 4].lightened(0.75)))
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 12)
+		row.add_child(_sticker(Journey.STICKERS[(chapter * 2 + (0 if mode == "parcel" else 10)) % 20].id, Vector2(78, 78)))
+		var content := VBoxContainer.new()
+		content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var done := Journey.chapter_count(records.current(), mode, chapter)
+		var visit := _button("%d. %s\nLevels %02d-%02d / %d of 30 stars" % [chapter + 1, Journey.CHAPTERS[mode][chapter], chapter * 30 + 1, (chapter + 1) * 30, done], show_levels.bind(mode, chapter))
+		visit.name = "VisitChapter%d" % chapter
+		visit.add_theme_font_size_override("font_size", 22)
+		visit.custom_minimum_size.y = 78
+		content.add_child(visit)
+		var bar := ProgressBar.new()
+		bar.custom_minimum_size.y = 8
+		bar.show_percentage = false
+		bar.max_value = 30
+		bar.value = done
+		bar.add_theme_stylebox_override("background", _meter_style(Color("e9e0f3")))
+		bar.add_theme_stylebox_override("fill", _meter_style(Look.PURPLE))
+		content.add_child(bar)
+		row.add_child(content)
+		panel.add_child(row)
+		margin.add_child(panel)
+		page.add_child(margin)
+		if chapter < 4:
+			page.add_child(_art("trail", Vector2(0, 14)))
+	page.add_child(_button("Visit my sticker album", show_album))
+
+func show_album(page_number: int = 0, achievements := false) -> void:
+	_clear_page()
+	screen_name = "album"
+	_header("LITTLE WINS, LOVELY PALS")
+	page.add_child(_label("%s's %s" % [records.current().name, "achievements" if achievements else "sticker album"], 34))
+	var tabs := HBoxContainer.new()
+	tabs.add_theme_constant_override("separation", 12)
+	tabs.add_child(_button("Stickers %d/20" % Journey.earned_ids(records.current()).size(), show_album.bind(0, false), not achievements))
+	tabs.add_child(_button("Badges %d/10" % Journey.earned_ids(records.current(), true).size(), show_album.bind(0, true), achievements))
+	page.add_child(tabs)
+	var goal := _label(Journey.next_goal(records.current()), 21, Look.PURPLE)
+	goal.custom_minimum_size.y = 54
+	page.add_child(goal)
+	var entries := Journey.rows(records.current(), achievements)
+	var current_page := clampi(page_number, 0, int((entries.size() - 1) / 4))
+	var grid := GridContainer.new()
+	grid.name = "AlbumGrid"
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 12)
+	grid.add_theme_constant_override("v_separation", 12)
+	for index in range(current_page * 4, mini(current_page * 4 + 4, entries.size())):
+		var entry: Dictionary = entries[index]
+		var panel := PanelContainer.new()
+		panel.name = entry.id
+		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		panel.add_theme_stylebox_override("panel", _style(PAPER if entry.earned else Color("f0ebf6")))
+		var content := VBoxContainer.new()
+		content.add_theme_constant_override("separation", 6)
+		content.add_child(_sticker(entry.id if not achievements else "medal", Vector2(0, 100), not entry.earned))
+		var title := _label(entry.name, 24)
+		title.custom_minimum_size.y = 66 if achievements else 34
+		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		content.add_child(title)
+		var requirement := _label(entry.goal, 20, MUTED)
+		requirement.custom_minimum_size.y = 56
+		content.add_child(requirement)
+		content.add_child(_label("Earned!" if entry.earned else "%d / %d" % [entry.current, entry.target], 21, TEAL if entry.earned else MUTED))
+		if not achievements:
+			var selected: bool = records.current().journey.avatar == entry.id
+			var choose := _button("My avatar" if selected else "Use as avatar" if entry.earned else "Keep exploring", _choose_avatar.bind(entry.id, current_page), selected)
+			choose.disabled = not entry.earned or selected
+			choose.custom_minimum_size.y = 72
+			choose.add_theme_font_size_override("font_size", 21)
+			content.add_child(choose)
+		panel.add_child(content)
+		grid.add_child(panel)
+	page.add_child(grid)
+	var navigation := HBoxContainer.new()
+	navigation.add_theme_constant_override("separation", 12)
+	var previous := _button("< Previous", show_album.bind(current_page - 1, achievements))
+	previous.disabled = current_page == 0
+	navigation.add_child(previous)
+	var page_label := _label("%d / %d" % [current_page + 1, int(ceil(entries.size() / 4.0))], 22, MUTED)
+	page_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	page_label.custom_minimum_size.x = 64
+	page_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	page_label.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	page_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	navigation.add_child(page_label)
+	var next := _button("Next >", show_album.bind(current_page + 1, achievements))
+	next.disabled = (current_page + 1) * 4 >= entries.size()
+	navigation.add_child(next)
+	page.add_child(navigation)
+	var footer := HBoxContainer.new()
+	footer.add_theme_constant_override("separation", 12)
+	footer.add_child(_button("Default avatar", _choose_avatar.bind("", current_page)))
+	footer.add_child(_button("< Home", show_home))
+	page.add_child(footer)
+
+func _choose_avatar(id: String, album_page: int) -> void:
+	if records.select_avatar(id):
+		_save_progress()
+		show_album(album_page)
 
 func start_level(game_mode: String, number: int, kind: String = "normal", day: String = "") -> void:
 	_clear_page()
@@ -398,6 +555,8 @@ func start_level(game_mode: String, number: int, kind: String = "normal", day: S
 	active_actions = []
 	tutorial_step = 0
 	_latest_result = {}
+	_new_stickers = []
+	_new_achievements = []
 	_header(("LEARN " if run_kind == "tutorial" else "DAILY JOY / " if run_kind == "daily" else "") + ("PARCEL SORT" if mode == "parcel" else "BLOCK EXIT"))
 	var nav := HBoxContainer.new()
 	nav.add_theme_constant_override("separation", 12)
@@ -410,7 +569,7 @@ func start_level(game_mode: String, number: int, kind: String = "normal", day: S
 	elif run_kind == "daily":
 		nav.add_child(_button(run_date, show_home))
 	else:
-		nav.add_child(_button("LEVEL %02d / %d" % [level_index + 1, levels[mode].size()], show_levels.bind(mode)))
+		nav.add_child(_button("LEVEL %02d / %d" % [level_index + 1, levels[mode].size()], show_journey.bind(mode)))
 	var settings_button := _button("Settings", show_settings)
 	settings_button.custom_minimum_size.x = 126
 	settings_button.size_flags_horizontal = Control.SIZE_SHRINK_END
@@ -630,6 +789,8 @@ func _commit_win() -> void:
 	if _run_recorded:
 		return
 	_run_recorded = true
+	var old_stickers := Journey.earned_ids(records.current())
+	var old_achievements := Journey.earned_ids(records.current(), true)
 	if run_kind == "tutorial":
 		records.current().tutorials[mode] = true
 	elif run_kind == "daily":
@@ -641,6 +802,8 @@ func _commit_win() -> void:
 		progress["last_" + mode] = mini(level_index + 1, levels[mode].size() - 1)
 	if run_kind != "tutorial":
 		records.current().sessions.erase(Session.key(run_kind, mode))
+		_new_stickers = Journey.earned_ids(records.current()).filter(func(id): return not old_stickers.has(id))
+		_new_achievements = Journey.earned_ids(records.current(), true).filter(func(id): return not old_achievements.has(id))
 	_save_progress()
 
 func show_result() -> void:
@@ -659,6 +822,15 @@ func show_result() -> void:
 	var cheer := _label("You did it, puzzle pal!", 42, Look.PURPLE)
 	cheer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	page.add_child(cheer)
+	if not _new_stickers.is_empty() or not _new_achievements.is_empty():
+		var names: Array = _new_stickers.map(func(id): return Journey.definition(id).name)
+		page.add_child(_label("New sticker%s: %s" % ["" if names.size() == 1 else "s", ", ".join(names)] if not names.is_empty() else "A new achievement badge!", 23, Look.PURPLE))
+		var index := 0
+		var definitions: Array = Journey.STICKERS if not names.is_empty() else Journey.ACHIEVEMENTS
+		for number in range(definitions.size()):
+			if definitions[number].id == (_new_stickers[0] if not names.is_empty() else _new_achievements[0]):
+				index = number
+		page.add_child(_button("See my new treasures >", show_album.bind(int(index / 4), names.is_empty())))
 	var score_card := PanelContainer.new()
 	score_card.add_theme_stylebox_override("panel", _style(Color("eee5fa"), 28, Color("d8c7ed")))
 	var score_label := _label("%d points%s" % [result.score, "   /   A new best!" if result.new_high else ""], 30, Look.PURPLE)
@@ -706,8 +878,13 @@ func show_players() -> void:
 	actions.add_child(_button("Rename current", _rename_player.bind(name_input, message)))
 	page.add_child(actions)
 	page.add_child(message)
+	page.add_child(_button("Choose my sticker avatar", show_album))
 	for player in records.players:
-		page.add_child(_button(("Selected: " if player.id == records.active_id else "Play as: ") + player.name, _select_player.bind(player.id), player.id == records.active_id))
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 12)
+		row.add_child(_avatar(player.journey.avatar, Vector2(74, 74)))
+		row.add_child(_button(("Selected: " if player.id == records.active_id else "Play as: ") + player.name, _select_player.bind(player.id), player.id == records.active_id))
+		page.add_child(row)
 	page.add_child(_button("Back to collection", show_home))
 
 func _add_player(input: LineEdit, message: Label) -> void:
@@ -747,8 +924,7 @@ func show_rankings(game_mode: String = "all") -> void:
 		panel.add_theme_stylebox_override("panel", _style(Color("f0e8fb") if row.id == records.active_id else PAPER, 28, Color("c7b0e1") if row.id == records.active_id else Color("e7dfee")))
 		var line := HBoxContainer.new()
 		line.add_theme_constant_override("separation", 16)
-		var avatar = _art("avatar", Vector2(74, 74))
-		avatar.variant = int(row.rank) - 1
+		var avatar = _avatar(row.avatar, Vector2(74, 74), int(row.rank) - 1)
 		line.add_child(avatar)
 		var contents := VBoxContainer.new()
 		contents.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -874,8 +1050,11 @@ func _preview_feedback() -> void:
 	feedback.play("deliver")
 
 func _load_progress() -> void:
-	records.restore(Store.load_data(save_path), _level_counts())
+	var saved := Store.load_data(save_path)
+	records.restore(saved, _level_counts())
 	progress = records.current().progress
+	if saved.get("version", 0) != 4:
+		_save_progress()
 
 func _save_progress() -> void:
 	if not Store.save_data(save_path, records.to_data()):

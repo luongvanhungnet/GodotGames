@@ -54,6 +54,37 @@ func _run() -> void:
 		screen.show_hint()
 		await _capture("comfort-" + game_mode)
 		print("COMFORT LAYOUT %s: content=%s viewport=%s" % [game_mode, screen.page.size, root.get_visible_rect().size])
+	# A populated preview profile exercises every earned sticker and badge.
+	for game_mode in ["parcel", "block"]:
+		for number in range(150):
+			screen.records.record(game_mode, number, 15000, 8, 0)
+	for day in range(1, 31):
+		screen.records.record_daily("2026-11-%02d" % day, "parcel", 15000, 8, 0)
+	screen.records.select_avatar("bunny_mail")
+	screen.show_home()
+	await _capture("journey-home")
+	for game_mode in ["parcel", "block"]:
+		screen.show_journey(game_mode)
+		await _capture("journey-" + game_mode)
+		print("JOURNEY LAYOUT %s: %s" % [game_mode, screen.page.size])
+	for number in range(5):
+		screen.show_album(number)
+		await _capture("album-%d" % number)
+		print("ALBUM LAYOUT %d: %s" % [number, screen.page.size])
+	screen.show_album(0, true)
+	await _capture("achievements")
+	# Capture the same UI with locked rewards and real next-goal guidance.
+	screen.records.add_player("New Pal")
+	screen.progress = screen.records.current().progress
+	screen.records.record("parcel", 0, 15000, 8, 0)
+	screen.records.record("parcel", 1, 15000, 8, 0)
+	screen.records.record("parcel", 2, 15000, 8, 0)
+	screen.show_album()
+	await _capture("album-growing")
+	screen.show_journey("parcel")
+	await _capture("journey-growing")
+	screen.show_rankings()
+	await _capture("sticker-rankings")
 	screen.queue_free()
 	await process_frame
 	for suffix in ["", ".bak", ".tmp"]:

@@ -4,6 +4,7 @@ extends RefCounted
 const MAX_PLAYERS := 8
 const Daily = preload("res://game/daily_puzzle.gd")
 const Session = preload("res://game/run_session.gd")
+const Journey = preload("res://game/journey.gd")
 var players: Array = []
 var settings := {"sound": true, "vibration": false, "reduced_motion": false, "clear_symbols": false}
 var active_id := "p1"
@@ -13,7 +14,13 @@ func _init() -> void:
 	players = [_new_player("p1", "Player 1")]
 
 func _new_player(id: String, player_name: String) -> Dictionary:
-	return {"id": id, "name": player_name, "progress": {"parcel": [], "block": [], "last_parcel": 0, "last_block": 0}, "results": {"parcel": {}, "block": {}}, "daily_results": {}, "sessions": {}, "tutorials": {"parcel": false, "block": false}}
+	return {"id": id, "name": player_name, "progress": {"parcel": [], "block": [], "last_parcel": 0, "last_block": 0}, "results": {"parcel": {}, "block": {}}, "daily_results": {}, "sessions": {}, "tutorials": {"parcel": false, "block": false}, "journey": {"daily_dates": [], "avatar": ""}}
+
+func select_avatar(sticker_id: String) -> bool:
+	if not sticker_id.is_empty() and not Journey.unlocked(current(), sticker_id):
+		return false
+	current().journey.avatar = sticker_id
+	return true
 
 func current() -> Dictionary:
 	for player in players:
@@ -88,6 +95,7 @@ func record_daily(day: String, game_mode: String, milliseconds: int, moves: int,
 	if not days.has(day):
 		days[day] = {}
 	days[day][game_mode] = summary.best
+	Journey.credit_daily(current(), day)
 	var dates := days.keys()
 	dates.sort()
 	while dates.size() > 90:
@@ -108,7 +116,7 @@ func _merge_record(previous: Dictionary, milliseconds: int, moves: int, undos: i
 func ranking(game_mode: String = "all") -> Array:
 	var rows: Array = []
 	for player in players:
-		var row := {"id": player.id, "name": player.name, "score": 0, "completed": 0, "time_ms": 0}
+		var row := {"id": player.id, "name": player.name, "avatar": player.journey.avatar, "score": 0, "completed": 0, "time_ms": 0}
 		for key in ["parcel", "block"]:
 			if game_mode != "all" and game_mode != key:
 				continue
@@ -132,7 +140,7 @@ func ranking(game_mode: String = "all") -> Array:
 	return rows
 
 func to_data() -> Dictionary:
-	return {"version": 3, "settings": settings.duplicate(), "active_player": active_id, "next_player_id": _next_id, "players": players.duplicate(true)}
+	return {"version": 4, "settings": settings.duplicate(), "active_player": active_id, "next_player_id": _next_id, "players": players.duplicate(true)}
 
 func restore(saved: Dictionary, counts: Dictionary) -> void:
 	players = []
@@ -146,6 +154,7 @@ func restore(saved: Dictionary, counts: Dictionary) -> void:
 	if not saved.get("players") is Array:
 		var legacy := _new_player("p1", "Player 1")
 		legacy.progress = _read_progress(saved, counts)
+		Journey.sync(legacy)
 		players.append(legacy)
 		return
 	var ids := {}
@@ -187,6 +196,7 @@ func restore(saved: Dictionary, counts: Dictionary) -> void:
 					if high < 0 or time < 0 or moves < 0 or solves < 0:
 						continue
 					player.results[game_mode][str(int(key))] = {"high_score": high, "best_time_ms": time, "fewest_moves": moves, "solves": solves}
+		Journey.sync(player)
 		players.append(player)
 	if players.is_empty():
 		players.append(_new_player("p1", "Player 1"))
@@ -195,6 +205,8 @@ func restore(saved: Dictionary, counts: Dictionary) -> void:
 		active_id = players[0].id
 
 func _read_extras(item: Dictionary, player: Dictionary) -> void:
+	if item.get("journey") is Dictionary:
+		player.journey = item.journey.duplicate(true)
 	var tutorials: Variant = item.get("tutorials", {})
 	for game_mode in ["parcel", "block"]:
 		player.tutorials[game_mode] = tutorials.get(game_mode, not player.progress[game_mode].is_empty()) if tutorials is Dictionary else not player.progress[game_mode].is_empty()

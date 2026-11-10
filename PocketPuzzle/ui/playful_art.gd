@@ -58,6 +58,9 @@ func _draw() -> void:
 	var center := size / 2.0
 	var scale_factor := minf(size.x / 180.0, size.y / 150.0)
 	match kind:
+		"trail":
+			for i in range(5):
+				draw_circle(Vector2(size.x * 0.5 + (i - 2) * 9, size.y * 0.5), 3, Color("c5afd9"))
 		"background":
 			draw_circle(Vector2(size.x + 15, 70), 155, Color("eee5fb"))
 			draw_circle(Vector2(-65, size.y * 0.7), 150, Color("fff0ed"))

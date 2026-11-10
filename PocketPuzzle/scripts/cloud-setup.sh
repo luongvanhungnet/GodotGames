@@ -31,4 +31,5 @@ fi
 "$tools_dir/godot" --headless --path . --script tests/records.gd
 "$tools_dir/godot" --headless --path . --script tests/daily_joy.gd
 "$tools_dir/godot" --headless --path . --script tests/comfort.gd
+"$tools_dir/godot" --headless --path . --script tests/journey.gd
 "$tools_dir/godot" --headless --path . --quit-after 5

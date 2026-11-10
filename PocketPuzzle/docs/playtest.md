@@ -1,4 +1,4 @@
-# PocketPuzzle playtest build 0.6.0
+# PocketPuzzle playtest build 0.7.0
 
 This build compares two playable 2D puzzle ideas. It is an offline prototype for
 testing enjoyment, clarity, and difficulty. Revenue and retention are unmeasured.
@@ -22,6 +22,15 @@ gentle sound effects and optional vibration. See `daily-joy.md` for details.
 Settings also offers reduced motion and numbered matching symbols. **Hint**
 highlights a verified next move or suggests undo steps back to a known route.
 Hints are free and do not make moves. See `comfort.md` for limits and controls.
+
+Use **Map** beside either game's Play button to visit five themed chapters of
+30 levels. Every chapter stays open. The collection panel shows the next sticker
+goal and opens the album. Earn 20 stickers and 10 local badges, then use an earned
+sticker as your player avatar. Rewards belong to each local player, credit
+existing unique completions, and cannot be farmed by replaying one level. Daily
+milestones count different dates, without requiring a consecutive streak. See
+`journey.md` for the complete requirements. Smaller screens can scroll the home
+collection to reach the album and its next-goal display.
 
 Completed levels display a star. Parcel and block pals carry the same identifying
 symbols as their deliveries or gates. Pastel colors, smiling characters, and brief

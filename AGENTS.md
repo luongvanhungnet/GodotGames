@@ -25,10 +25,13 @@ The current playtest build contains Parcel Sort and Block Exit, with 150 levels 
 - Records: godot --headless --path . --script tests/records.gd
 - Daily Joy: godot --headless --path . --script tests/daily_joy.gd
 - Comfort and hints: godot --headless --path . --script tests/comfort.gd
+- Journey and collections: godot --headless --path . --script tests/journey.gd
 - The gameplay suite replays all 300 solutions and checks undo, collisions, and gates.
 - Records tests cover active solve time, scores, local rankings, and save migration.
 - Daily Joy tests cover lessons, daily records, settings, validated unfinished
   sessions, backup recovery, profile isolation, and date rollover.
+- Journey tests cover unique-completion credit, all sticker and badge thresholds,
+  daily reward history, avatar eligibility, migration, and profile isolation.
 - Run relevant gameplay tests when gameplay is added.
 - Fail tests with nonzero exit status. Report checks that could not run.
 - Headless results do not establish rendering quality or device performance.
