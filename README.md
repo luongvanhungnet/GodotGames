@@ -3,11 +3,22 @@
 Godot 4.7.2 Standard / GDScript / Compatibility renderer.
 Offline Android prototype, 720 x 1280 portrait viewport.
 
+## Playable prototypes
+- **Parcel Sort:** tap three queues to deliver parcels in order. Unmatched parcels
+  wait in three slots; matching waiting parcels dispatch automatically.
+- **Block Exit:** select a block, then swipe or use the arrow buttons to slide it
+  through a gate with the same color and symbol.
+
+Each game has 30 deterministic, solution-checked levels, undo, restart, a level
+chooser, and locally saved completion progress. All levels are open for comparison.
+The game works offline without ads, purchases, accounts, or analytics.
+See the [playtest guide](PocketPuzzle/docs/playtest.md) for controls and comparison tasks.
+
 ## Local
 The Git repository root is `D:\GodotGames`; the Godot project is `PocketPuzzle/`.
 Keep one repository: do not run `git init` in PocketPuzzle.
 Open `PocketPuzzle/project.godot` with Godot 4.7.2 Standard and press F5.
-The startup scene displays "PocketPuzzle / Setup complete" on a portrait background.
+The startup scene opens a collection screen with both playable games.
 Install matching export templates through Editor > Manage Export Templates.
 Android export needs the SDK and a compatible JDK; CI uses JDK 17.
 CI pins Android Platform 35 and Build Tools 35.0.1, following the
@@ -21,7 +32,13 @@ Run project commands from the project directory:
     cd PocketPuzzle
     godot --headless --path . --editor --import --quit
     godot --headless --path . --script tests/smoke.gd
+    godot --headless --path . --script tests/gameplay.gd
     godot --headless --path . --quit-after 5
+
+Regenerate levels with `python tools/generate_levels.py`, then rerun both test suites.
+The generator uses Python's standard library; the game runtime is entirely GDScript.
+For optional GPU screenshots at 720 x 1280, run
+`godot --path . --script tests/capture.gd`. Captures go in ignored `builds/`.
 
 ## Codex Cloud
 Push this repository to GitHub and connect it in Codex Cloud.

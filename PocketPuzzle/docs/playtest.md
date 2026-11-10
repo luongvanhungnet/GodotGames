@@ -1,0 +1,70 @@
+# PocketPuzzle playtest build 0.2.0
+
+This build compares two playable 2D puzzle ideas. It is an offline prototype for
+testing enjoyment, clarity, and difficulty. Revenue and retention are unmeasured.
+
+## Controls
+
+Choose a game from the collection. The level button opens all 30 levels. Undo
+restores a full move, Restart resets the current puzzle, and Android Back returns
+to the collection. Completion and the next level are saved locally. An unfinished
+board restarts when the app is relaunched. Uninstalling the app removes its progress.
+
+### Parcel Sort
+
+The delivery strip requests parcels in order, starting at NOW. Tap anywhere in a
+queue to send its top parcel. A matching parcel delivers immediately; any other
+parcel occupies a waiting slot. Waiting parcels deliver automatically when their
+turn arrives. Three waiting slots are available. A full waiting area can still
+accept a matching delivery. If every queue is blocked, undo or restart.
+
+Each parcel has both a color and a symbol. The first level teaches dispatching;
+the next levels introduce waiting and automatic delivery. Later levels have four
+parcel types. Every parcel must be delivered to finish.
+
+### Block Exit
+
+Tap a block to select it. Swipe at least 24 logical pixels in a direction, or use
+the four arrow buttons. Every action moves one grid cell. Entire rectangular
+blocks must fit their matching gate before they can leave. Blocks cannot overlap,
+rotate, or leave through other boundaries. Deliver every block to finish.
+
+Early levels have small boards with few pieces. Later levels introduce rectangular
+blocks and four gate types. Both blocks and gates carry matching symbols.
+
+## A practical comparison session
+
+1. Recruit 10–20 people who enjoy casual phone games. Explain that this is a
+   prototype; observe only with their consent.
+2. Give half the players Parcel Sort first, and the other half Block Exit first.
+3. Let each person try levels 1–5 of each game without explaining the rules.
+4. Record manually: time to first successful move, requests for help, completed
+   levels, restarts, and which game they voluntarily choose for another round.
+5. Ask what felt confusing, satisfying, or unfair. Ask which game they would keep.
+6. Invite them back the following day. A tiny test is directional feedback, not a
+   reliable retention estimate or proof of demand.
+
+Use the findings to revise mechanics and level difficulty before building more
+content or spending on marketing. The collection and progress are local features;
+the app does not transmit playtest observations.
+
+## Technical validation
+
+- The level generator uses fixed per-level seeds and constructive solutions.
+  All 30 Parcel boards and all 30 Block boards are distinct.
+- `tests/gameplay.gd` checks all 60 solutions against the GDScript rules, parcel
+  conservation, waiting capacity, blocked moves, collisions, gate fit, and undo.
+- `tests/smoke.gd` loads both games, completes their first levels through the UI
+  controller, checks the win flow and chooser, and reloads saved completion.
+- Tests use their own progress files and leave the player's save untouched.
+- `tests/capture.gd` captures the collection and first/last boards with a real GPU.
+
+On 2026-11-11, Windows and WSL tests passed (2,850 gameplay checks). GPU captures
+confirmed that controls fit a 720 x 1280 viewport. On an OPPO CPH1803 running Android
+8.1, actual touch input completed Parcel Sort level 1 in six moves and Block Exit
+level 1 in seven moves, including a swipe and arrow buttons. Screenshots confirmed
+the result screens and the local completion count advancing to 2 / 60. Captured
+app logs showed no errors. Images are in ignored `builds/prototype-*.png`.
+
+Additional phones, long sessions, and player difficulty testing remain necessary.
+The earlier startup-only validation is recorded separately in `validation.md`.

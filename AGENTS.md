@@ -2,6 +2,7 @@
 
 Lightweight offline portrait Android puzzle game. Godot 4.7.2 Standard,
 GDScript, Compatibility renderer. Pin matching editor and export templates.
+The current playtest build contains Parcel Sort and Block Exit, with 30 levels each.
 
 ## Rules
 - The only Git repository is the repository root; never initialize one in PocketPuzzle/.
@@ -10,6 +11,9 @@ GDScript, Compatibility renderer. Pin matching editor and export templates.
 - Keep changes focused and avoid dependencies without a demonstrated need.
 - Prefer simple 2D scenes, small assets, and bounded physics/particle workloads.
 - Keep puzzle rules separate from presentation; support seeded generation.
+- Pure puzzle rules live in PocketPuzzle/game/ and the interface in PocketPuzzle/ui/.
+- Level data lives in PocketPuzzle/assets/data/levels.json. Rebuild deterministic
+  fixtures from PocketPuzzle with `python tools/generate_levels.py`.
 - Do not add accounts, ads, analytics, purchases, or multiplayer unless requested.
 - Never commit signing keys or credentials. Commit scenes and .uid files.
 
@@ -17,6 +21,8 @@ GDScript, Compatibility renderer. Pin matching editor and export templates.
 - Run all project commands from PocketPuzzle/ (`cd PocketPuzzle` from the root).
 - Import: godot --headless --path . --editor --import --quit
 - Smoke check: godot --headless --path . --script tests/smoke.gd
+- Gameplay: godot --headless --path . --script tests/gameplay.gd
+- The gameplay suite replays all 60 solutions and checks undo, collisions, and gates.
 - Run relevant gameplay tests when gameplay is added.
 - Fail tests with nonzero exit status. Report checks that could not run.
 - Headless results do not establish rendering quality or device performance.
