@@ -150,4 +150,3 @@ func _test_ui() -> void:
 	_check(screen._content_margin.get_theme_constant("margin_top") >= 64, "Live layout applies simulated safe-area padding")
 	screen.queue_free()
 	await process_frame
-
