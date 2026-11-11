@@ -35,6 +35,15 @@ Build 0.8 adds incremental current-board hints, difficulty estimates, **Find nex
 navigation that resumes saved attempts first, optional verified reference move
 goals, and confirmation before restarting an attempt with moves. See
 [smarter hints and progression](PocketPuzzle/docs/progression.md).
+Build 0.9 adds user-selected **backup export/restore** with validation and recovery,
+optional **local playtest notes**, manual feedback export and review tooling, safe-
+area margins, and Android bundle/release preparation. Nothing is sent automatically.
+See [data tools](PocketPuzzle/docs/data-tools.md) and the
+[release checklist](PocketPuzzle/docs/release-checklist.md).
+Prepared store text and artwork live in [docs/store](PocketPuzzle/docs/store/listing.md).
+`python scripts/export_bundle.py --preview` creates a debug-signed review AAB;
+`python tools/package_review.py` packages the preview builds and store drafts.
+Production signing and store publication require publisher configuration.
 
 ## Local
 The Git repository root is `D:\GodotGames`; the Godot project is `PocketPuzzle/`.
@@ -60,6 +69,8 @@ Run project commands from the project directory:
     godot --headless --path . --script tests/comfort.gd
     godot --headless --path . --script tests/journey.gd
     godot --headless --path . --script tests/progression.gd
+    godot --headless --path . --script tests/data_tools.gd
+    python -m unittest discover -s tests -p 'test_*.py'
     godot --headless --path . --quit-after 5
 
 Regenerate levels with `python tools/generate_levels.py`, then rerun all test suites.

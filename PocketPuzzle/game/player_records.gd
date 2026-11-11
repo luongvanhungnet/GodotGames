@@ -6,7 +6,7 @@ const Daily = preload("res://game/daily_puzzle.gd")
 const Session = preload("res://game/run_session.gd")
 const Journey = preload("res://game/journey.gd")
 var players: Array = []
-var settings := {"sound": true, "vibration": false, "reduced_motion": false, "clear_symbols": false, "move_goals": false}
+var settings := {"sound": true, "vibration": false, "reduced_motion": false, "clear_symbols": false, "move_goals": false, "playtest_feedback": false}
 var active_id := "p1"
 var _next_id := 2
 
@@ -146,7 +146,7 @@ func restore(saved: Dictionary, counts: Dictionary) -> void:
 	players = []
 	active_id = "p1"
 	_next_id = 2
-	settings = {"sound": true, "vibration": false, "reduced_motion": false, "clear_symbols": false, "move_goals": false}
+	settings = {"sound": true, "vibration": false, "reduced_motion": false, "clear_symbols": false, "move_goals": false, "playtest_feedback": false}
 	if saved.get("settings") is Dictionary:
 		for key in settings:
 			if saved.settings.get(key) is bool:

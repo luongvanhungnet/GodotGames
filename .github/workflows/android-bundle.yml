@@ -1,0 +1,79 @@
+name: Android review or release bundle
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/android-bundle.yml'
+      - 'PocketPuzzle/scripts/export_bundle.py'
+      - 'PocketPuzzle/export_presets.cfg'
+  workflow_dispatch:
+    inputs:
+      production:
+        description: Use configured release signing (otherwise build a preview)
+        type: boolean
+        default: false
+      package_id:
+        description: Final application ID, required for production signing
+        type: string
+permissions:
+  contents: read
+jobs:
+  bundle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: PocketPuzzle
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install matching SDK and run checks
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platform-tools' 'platforms;android-36' 'build-tools;36.1.0'
+          bash scripts/cloud-setup.sh
+          python3 -m unittest discover -s tests -p 'test_*.py'
+      - name: Install export templates
+        run: |
+          VERSION=$(tr -d '\r\n' < .godot-version)
+          curl -fL --retry 3 "https://github.com/godotengine/godot/releases/download/${VERSION}-stable/Godot_v${VERSION}-stable_export_templates.tpz" -o /tmp/templates.zip
+          unzip -q /tmp/templates.zip -d /tmp/templates
+          mkdir -p "$HOME/.local/share/godot/export_templates/${VERSION}.stable"
+          cp -a /tmp/templates/templates/. "$HOME/.local/share/godot/export_templates/${VERSION}.stable/"
+      - name: Configure export and build
+        env:
+          PRODUCTION: ${{ inputs.production }}
+          PACKAGE_ID: ${{ inputs.package_id }}
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+          GODOT_ANDROID_KEYSTORE_RELEASE_USER: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+          GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.config/godot" "$HOME/.android" builds
+          printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/android_sdk_path = "%s"\nexport/android/java_sdk_path = "%s"\n' "$ANDROID_HOME" "$JAVA_HOME" > "$HOME/.config/godot/editor_settings-4.7.tres"
+          export GODOT_BINARY="$PWD/.godot/cloud-tools/godot"
+          if [[ "$PRODUCTION" == true ]]; then
+            test -n "$RELEASE_KEYSTORE_BASE64" || { echo 'Configure release signing secrets first.'; exit 1; }
+            printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 --decode > builds/release.keystore
+            export GODOT_ANDROID_KEYSTORE_RELEASE_PATH="$PWD/builds/release.keystore"
+            python3 scripts/export_bundle.py --package-id "$PACKAGE_ID"
+          else
+            keytool -genkeypair -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -dname 'CN=Android Debug,O=Android,C=US' -keyalg RSA -keysize 2048 -validity 10000
+            export GODOT_ANDROID_KEYSTORE_DEBUG_PATH="$HOME/.android/debug.keystore"
+            export GODOT_ANDROID_KEYSTORE_DEBUG_USER=androiddebugkey GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD=android
+            python3 scripts/export_bundle.py --preview
+          fi
+      - name: Validate Android App Bundle
+        run: |
+          curl -fL --retry 3 https://github.com/google/bundletool/releases/download/1.18.3/bundletool-all-1.18.3.jar -o /tmp/bundletool.jar
+          for bundle in builds/PocketPuzzle-*.aab; do
+            java -jar /tmp/bundletool.jar validate --bundle="$bundle" > /tmp/bundle-validation.log
+          done
+          echo 'Android App Bundle validation passed.'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PocketPuzzle-bundle
+          path: PocketPuzzle/builds/PocketPuzzle-*.aab
+          if-no-files-found: error

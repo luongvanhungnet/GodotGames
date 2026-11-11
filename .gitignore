@@ -6,4 +6,6 @@ PocketPuzzle/builds/
 .env.*
 *.keystore
 *.jks
+__pycache__/
+*.py[cod]
 .godot/export_credentials.cfg

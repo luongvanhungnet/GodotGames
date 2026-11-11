@@ -1,9 +1,15 @@
-# PocketPuzzle playtest build 0.8.0
+# PocketPuzzle playtest build 0.9.0
 
 This build compares two playable 2D puzzle ideas. It is an offline prototype for
 testing enjoyment, clarity, and difficulty. Revenue and retention are unmeasured.
 
 ## Controls
+
+Settings now opens **Backups & playtest notes**. Export/restore all local game
+data with a chosen file and confirmation, or explicitly submit and manually export
+optional puzzle ratings. Reports stay local and omit profile names and scores.
+See `data-tools.md` and `release-checklist.md`. Difficulty tuning awaits actual
+player feedback; synthetic tests are not player research.
 
 Choose a game from the collection. The level button opens all 150 levels in pages
 of 30. Undo

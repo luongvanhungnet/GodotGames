@@ -18,6 +18,9 @@ const Journey = preload("res://game/journey.gd")
 const StickerArt = preload("res://ui/sticker_art.gd")
 const HintSearch = preload("res://game/hint_search.gd")
 const PuzzleProgress = preload("res://game/puzzle_progress.gd")
+const DataTools = preload("res://ui/data_tools.gd")
+const SafeLayout = preload("res://ui/safe_layout.gd")
+const BackGuard = preload("res://ui/back_guard.gd")
 const INK := Look.INK
 const MUTED := Look.MUTED
 const CREAM := Look.BACKGROUND
@@ -69,6 +72,9 @@ var _hint_job
 var _restart_dialog: ConfirmationDialog
 var challenge_label: Label
 var _reference_goal := 0
+var data_tools
+var _content_margin: MarginContainer
+var _back_guard = BackGuard.new()
 
 func _ready() -> void:
 	theme = Theme.new()
@@ -86,6 +92,8 @@ func _ready() -> void:
 	feedback = Feedback.new()
 	add_child(feedback)
 	feedback.configure(records.settings)
+	data_tools = DataTools.new()
+	add_child(data_tools)
 	var background := ColorRect.new()
 	background.name = "Background"
 	background.color = CREAM
@@ -101,6 +109,7 @@ func _ready() -> void:
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	add_child(_scroll)
 	var margin := MarginContainer.new()
+	_content_margin = margin
 	margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	for side in ["left", "right"]:
 		margin.add_theme_constant_override("margin_" + side, 30)
@@ -113,14 +122,29 @@ func _ready() -> void:
 	margin.add_child(page)
 	get_tree().auto_accept_quit = false
 	get_tree().quit_on_go_back = false
+	resized.connect(_update_safe_area)
+	_update_safe_area()
 	show_home()
+
+func _update_safe_area() -> void:
+	if OS.has_feature("android") and is_instance_valid(_content_margin):
+		apply_safe_area(DisplayServer.get_display_safe_area(), DisplayServer.window_get_size())
+
+func apply_safe_area(safe: Rect2i, physical: Vector2i) -> void:
+	var edges := SafeLayout.insets(safe, physical, get_viewport_rect().size)
+	for item in [["left", 30 + edges.x], ["top", 24 + edges.y], ["right", 30 + edges.z], ["bottom", 24 + edges.w]]:
+		_content_margin.add_theme_constant_override("margin_" + item[0], item[1])
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
 		_stash_session()
 		get_tree().quit()
 	elif what == NOTIFICATION_WM_GO_BACK_REQUEST:
-		if is_instance_valid(_restart_dialog):
+		if OS.has_feature("android") and not _back_guard.accept(Time.get_ticks_msec()):
+			return
+		if is_instance_valid(data_tools) and data_tools.handle_back():
+			return
+		elif is_instance_valid(_restart_dialog):
 			_finish_restart(false)
 		elif screen_name == "home":
 			get_tree().quit()
@@ -686,8 +710,11 @@ func restart_run() -> void:
 	_restart_dialog.cancel_button_text = "Keep playing"
 	_restart_dialog.exclusive = true
 	_restart_dialog.borderless = true
+	_restart_dialog.transparent_bg = true
 	_restart_dialog.theme = theme.duplicate()
 	_restart_dialog.theme.default_font_size = 24
+	_restart_dialog.add_theme_constant_override("buttons_min_height", 80)
+	_restart_dialog.add_theme_constant_override("buttons_min_width", 180)
 	_restart_dialog.add_theme_stylebox_override("panel", _style(PAPER, 26, Color("d8c7ed")))
 	_restart_dialog.get_label().add_theme_color_override("font_color", INK)
 	_restart_dialog.get_label().autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -981,6 +1008,7 @@ func show_result() -> void:
 	options.add_child(_button("Pick a level", show_levels.bind(mode)))
 	options.add_child(_button("Rankings", show_rankings))
 	page.add_child(options)
+	page.add_child(_button("Rate this puzzle", data_tools.rate_current))
 	page.add_child(_button("Back to our happy place", show_home))
 
 func show_players() -> void:
@@ -1165,6 +1193,7 @@ func show_settings() -> void:
 	page.add_child(_label("Reduced motion keeps pals still. Number symbols match parcels, pals and gates using 1 to 4.", 21, MUTED))
 	page.add_child(_button("Preview my settings", _preview_feedback))
 	page.add_child(_label("Vibration depends on your phone and its system settings. Your choices are saved for everyone on this device.", 21, MUTED))
+	page.add_child(_button("Backups & playtest notes", data_tools.show_page))
 	if not _settings_return.is_empty():
 		page.add_child(_button("Back to my puzzle", resume_saved.bind(_settings_return), true))
 	elif not _settings_lesson.is_empty():

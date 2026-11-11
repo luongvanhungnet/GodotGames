@@ -103,10 +103,20 @@ func _run() -> void:
 	await _capture("difficulty-levels")
 	screen.show_settings()
 	await _capture("move-goal-settings")
+	screen.data_tools.show_page()
+	await _capture("data-tools")
+	screen.data_tools.context = {"mode": "parcel", "level": 1, "kind": "normal", "day": ""}
+	screen.data_tools.show_rating()
+	await _capture("playtest-opt-in")
+	screen.data_tools._enable_feedback()
+	await _capture("playtest-rating")
 	screen.queue_free()
 	await process_frame
 	for suffix in ["", ".bak", ".tmp"]:
 		DirAccess.remove_absolute("user://pocketpuzzle-capture-progress.json" + suffix)
+	for suffix in ["", ".bak", ".tmp"]:
+		if FileAccess.file_exists("user://pocketpuzzle-capture-progress.json.feedback" + suffix):
+			DirAccess.remove_absolute("user://pocketpuzzle-capture-progress.json.feedback" + suffix)
 	quit()
 
 func _capture(label: String) -> void:

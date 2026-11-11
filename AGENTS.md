@@ -27,6 +27,7 @@ The current playtest build contains Parcel Sort and Block Exit, with 150 levels 
 - Comfort and hints: godot --headless --path . --script tests/comfort.gd
 - Journey and collections: godot --headless --path . --script tests/journey.gd
 - Progression and search: godot --headless --path . --script tests/progression.gd
+- Backup and playtest tools: godot --headless --path . --script tests/data_tools.gd
 - The gameplay suite replays all 300 solutions and checks undo, collisions, and gates.
 - Records tests cover active solve time, scores, local rankings, and save migration.
 - Daily Joy tests cover lessons, daily records, settings, validated unfinished

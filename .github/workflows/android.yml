@@ -25,7 +25,9 @@ jobs:
           set -euo pipefail
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platform-tools' 'platforms;android-35' 'build-tools;35.0.1'
       - name: Install engine and run checks
-        run: bash scripts/cloud-setup.sh
+        run: |
+          bash scripts/cloud-setup.sh
+          python3 -m unittest discover -s tests -p 'test_*.py'
       - name: Install matching export templates
         shell: bash
         run: |
@@ -53,4 +55,12 @@ jobs:
         with:
           name: PocketPuzzle-debug
           path: PocketPuzzle/builds/PocketPuzzle-debug.apk
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PocketPuzzle-store-draft
+          path: |
+            PocketPuzzle/docs/store/
+            PocketPuzzle/docs/release-checklist.md
+            PocketPuzzle/docs/data-tools.md
           if-no-files-found: error
