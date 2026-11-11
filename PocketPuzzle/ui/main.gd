@@ -16,6 +16,8 @@ const Feedback = preload("res://ui/feedback.gd")
 const Hint = preload("res://game/puzzle_hint.gd")
 const Journey = preload("res://game/journey.gd")
 const StickerArt = preload("res://ui/sticker_art.gd")
+const HintSearch = preload("res://game/hint_search.gd")
+const PuzzleProgress = preload("res://game/puzzle_progress.gd")
 const INK := Look.INK
 const MUTED := Look.MUTED
 const CREAM := Look.BACKGROUND
@@ -63,6 +65,10 @@ var _last_date_check := 0
 var _home_day := ""
 var _new_stickers: Array = []
 var _new_achievements: Array = []
+var _hint_job
+var _restart_dialog: ConfirmationDialog
+var challenge_label: Label
+var _reference_goal := 0
 
 func _ready() -> void:
 	theme = Theme.new()
@@ -114,7 +120,9 @@ func _notification(what: int) -> void:
 		_stash_session()
 		get_tree().quit()
 	elif what == NOTIFICATION_WM_GO_BACK_REQUEST:
-		if screen_name == "home":
+		if is_instance_valid(_restart_dialog):
+			_finish_restart(false)
+		elif screen_name == "home":
 			get_tree().quit()
 		elif screen_name == "settings" and not _settings_return.is_empty():
 			resume_saved(_settings_return)
@@ -123,6 +131,7 @@ func _notification(what: int) -> void:
 		else:
 			show_home()
 	elif what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		_cancel_hint()
 		if what == NOTIFICATION_APPLICATION_PAUSED:
 			_app_suspended = true
 		else:
@@ -136,10 +145,19 @@ func _notification(what: int) -> void:
 			_app_suspended = false
 		else:
 			_app_unfocused = false
-		if not _app_suspended and not _app_unfocused:
+		if not _app_suspended and not _app_unfocused and not is_instance_valid(_restart_dialog):
 			solve_clock.resume(Time.get_ticks_msec())
 
 func _process(_delta: float) -> void:
+	if _hint_job != null and screen_name == "game" and not _app_suspended and not _app_unfocused:
+		_hint_job.step()
+		if _hint_job.done:
+			if OS.is_debug_build():
+				print("HINT PERF work_us=%d peak_slice_us=%d states=%d result=%s" % [_hint_job.work_usec, _hint_job.peak_slice_usec, _hint_job.visited_count(), _hint_job.reason])
+			var suggestion: Dictionary = _hint_job.result
+			_hint_job = null
+			hint_button.disabled = false
+			_apply_hint(suggestion)
 	if screen_name == "home" and Time.get_ticks_msec() - _last_date_check >= 1000:
 		_last_date_check = Time.get_ticks_msec()
 		if _home_day != today():
@@ -248,11 +266,16 @@ func _button(text: String, callback: Callable, primary := false) -> Button:
 	return button
 
 func _clear_page() -> void:
+	_cancel_hint()
+	if is_instance_valid(_restart_dialog):
+		_restart_dialog.queue_free()
+		_restart_dialog = null
 	_stash_session()
 	solve_clock.finish(Time.get_ticks_msec())
 	stats_label = null
 	instructions_label = null
 	status_label = null
+	challenge_label = null
 	completion_pending = false
 	for child in page.get_children():
 		page.remove_child(child)
@@ -388,6 +411,7 @@ func show_levels(game_mode: String, page_number: int = -1) -> void:
 	var current_page := clampi(int(level_index / 30) if page_number < 0 else page_number, 0, int((count - 1) / 30))
 	page.add_child(_label("Chapter %d / %s" % [current_page + 1, Journey.CHAPTERS[mode][current_page]], 25, Look.PURPLE))
 	page.add_child(_label("%d little adventures. Every level is open!" % count, 22, MUTED))
+	page.add_child(_label("G = Gentle / T = Tricky / C = Challenging (estimates)", 20, MUTED))
 	var completed := Journey.completed(records.current(), mode)
 	var grid := GridContainer.new()
 	grid.columns = 5
@@ -395,8 +419,16 @@ func show_levels(game_mode: String, page_number: int = -1) -> void:
 	grid.add_theme_constant_override("v_separation", 12)
 	for i in range(current_page * 30, mini(current_page * 30 + 30, count)):
 		var done: bool = completed.has(i)
-		var button := _button("%02d" % (i + 1), start_level.bind(mode, i))
+		var difficulty := PuzzleProgress.difficulty(mode, levels[mode][i])
+		var button := _button("%02d / %s" % [i + 1, difficulty.left(1)], start_level.bind(mode, i))
+		button.add_theme_font_size_override("font_size", 21)
+		button.tooltip_text = "%s difficulty estimate" % difficulty
 		button.add_theme_stylebox_override("normal", _style(Color("def0e5") if done else PAPER, 24, Color("b8d8c7") if done else Color("e9e0f2")))
+		for state in ["normal", "hover", "pressed", "disabled"]:
+			var tile_style: StyleBoxFlat = button.get_theme_stylebox(state).duplicate()
+			tile_style.content_margin_left = 8
+			tile_style.content_margin_right = 8
+			button.add_theme_stylebox_override(state, tile_style)
 		if done:
 			button.icon = STAR
 			button.expand_icon = true
@@ -424,6 +456,11 @@ func show_journey(game_mode: String = "parcel") -> void:
 	navigation.add_theme_constant_override("separation", 12)
 	navigation.add_child(_button("< Home", show_home))
 	navigation.add_child(_button("Parcel" if mode == "block" else "Block", show_journey.bind("parcel" if mode == "block" else "block")))
+	var next_button := _button("Find next >", find_next_puzzle.bind(mode), true)
+	next_button.name = "FindNextPuzzle"
+	next_button.tooltip_text = "Find my next puzzle; saved attempts resume first"
+	next_button.disabled = PuzzleProgress.next_unfinished(records.current(), mode, levels[mode].size()) < 0 and not records.current().sessions.has(mode)
+	navigation.add_child(next_button)
 	page.add_child(navigation)
 	page.add_child(_label("Your %s journey." % ("Parcel" if mode == "parcel" else "Block"), 36))
 	page.add_child(_label("Five cozy chapters. Every puzzle is open.", 22, MUTED))
@@ -555,6 +592,7 @@ func start_level(game_mode: String, number: int, kind: String = "normal", day: S
 	active_actions = []
 	tutorial_step = 0
 	_latest_result = {}
+	_reference_goal = PuzzleProgress.reference_goal(mode, levels[mode][level_index]) if run_kind != "tutorial" else 0
 	_new_stickers = []
 	_new_achievements = []
 	_header(("LEARN " if run_kind == "tutorial" else "DAILY JOY / " if run_kind == "daily" else "") + ("PARCEL SORT" if mode == "parcel" else "BLOCK EXIT"))
@@ -579,6 +617,8 @@ func start_level(game_mode: String, number: int, kind: String = "normal", day: S
 	page.add_child(_label("Let's send a little happiness!" if mode == "parcel" else "A little nudge. A happy exit.", 30))
 	instructions_label = _label("Tap a queue to send a parcel. Extras wait for their turn." if mode == "parcel" else "Tap a pal, then swipe or use the arrows. Find its matching gate!", 22, MUTED)
 	page.add_child(instructions_label)
+	challenge_label = _label("", 20, TEAL)
+	page.add_child(challenge_label)
 	stats_label = _label("", 22, INK)
 	page.add_child(stats_label)
 	delivery_label = _label("", 20, TEAL)
@@ -631,7 +671,70 @@ func start_level(game_mode: String, number: int, kind: String = "normal", day: S
 	_stash_session()
 
 func restart_run() -> void:
-	start_level(mode, level_index, run_kind, run_date)
+	if screen_name != "game" or completion_pending or is_instance_valid(_restart_dialog):
+		return
+	if attempt_moves == 0:
+		start_level(mode, level_index, run_kind, run_date)
+		return
+	_cancel_hint()
+	solve_clock.pause(Time.get_ticks_msec())
+	_stash_session()
+	_restart_dialog = ConfirmationDialog.new()
+	_restart_dialog.title = "Start this puzzle again?"
+	_restart_dialog.dialog_text = "Start this puzzle again?\n\nYour moves, undo history and time will reset.\nYour best scores and stickers stay saved."
+	_restart_dialog.ok_button_text = "Restart"
+	_restart_dialog.cancel_button_text = "Keep playing"
+	_restart_dialog.exclusive = true
+	_restart_dialog.borderless = true
+	_restart_dialog.theme = theme.duplicate()
+	_restart_dialog.theme.default_font_size = 24
+	_restart_dialog.add_theme_stylebox_override("panel", _style(PAPER, 26, Color("d8c7ed")))
+	_restart_dialog.get_label().add_theme_color_override("font_color", INK)
+	_restart_dialog.get_label().autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_restart_dialog.get_label().custom_minimum_size = Vector2(480, 160)
+	_restart_dialog.get_ok_button().custom_minimum_size = Vector2(180, 72)
+	_restart_dialog.get_cancel_button().custom_minimum_size = Vector2(180, 72)
+	for button in [_restart_dialog.get_ok_button(), _restart_dialog.get_cancel_button()]:
+		var primary: bool = button == _restart_dialog.get_ok_button()
+		button.add_theme_font_override("font", Look.bold_font())
+		button.add_theme_stylebox_override("normal", _style(Look.PURPLE if primary else Color("eee5fa")))
+		button.add_theme_stylebox_override("hover", _style(Look.PURPLE.lightened(0.1) if primary else Color("e5d8f5")))
+		button.add_theme_stylebox_override("pressed", _style(Look.PURPLE.darkened(0.1) if primary else Color("dbc9ef")))
+		button.add_theme_stylebox_override("focus", Look.box(Color.TRANSPARENT, 26, Look.PURPLE))
+		for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+			button.add_theme_color_override(state, PAPER if primary else INK)
+	_restart_dialog.confirmed.connect(_finish_restart.bind(true))
+	_restart_dialog.canceled.connect(_finish_restart.bind(false))
+	add_child(_restart_dialog)
+	_restart_dialog.popup_centered(Vector2i(560, 300))
+
+func _finish_restart(confirmed: bool) -> void:
+	if not is_instance_valid(_restart_dialog):
+		return
+	_restart_dialog.hide()
+	_restart_dialog.queue_free()
+	_restart_dialog = null
+	if screen_name != "game":
+		return
+	if confirmed:
+		start_level(mode, level_index, run_kind, run_date)
+	elif not _app_suspended and not _app_unfocused:
+		solve_clock.resume(Time.get_ticks_msec())
+
+func find_next_puzzle(game_mode: String) -> void:
+	_stash_session()
+	var pending: Dictionary = records.current().sessions.get(game_mode, {})
+	if not pending.is_empty():
+		if not Session.restore(pending, levels).is_empty():
+			resume_saved(game_mode)
+			return
+		records.current().sessions.erase(game_mode)
+		_save_progress()
+	var number := PuzzleProgress.next_unfinished(records.current(), game_mode, levels[game_mode].size())
+	if number < 0:
+		show_journey(game_mode)
+	else:
+		start_level(game_mode, number)
 
 func open_game(game_mode: String) -> void:
 	if records.current().sessions.has(game_mode):
@@ -664,21 +767,39 @@ func _arrow_move(direction: Vector2i) -> void:
 		play_move(board.selected, direction)
 
 func _clear_hint() -> void:
+	_cancel_hint()
 	if board != null and run_kind != "tutorial":
 		board.guide_lane = -1
 		board.guide_piece = -1
 		board.queue_redraw()
 
 func show_hint() -> void:
-	if screen_name != "game" or completion_pending or run_kind == "tutorial":
+	if screen_name != "game" or completion_pending or run_kind == "tutorial" or is_instance_valid(_restart_dialog):
 		return
 	_clear_hint()
-	var suggestion := Hint.suggest(mode, levels[mode][level_index], rules)
+	_hint_job = HintSearch.new(mode, levels[mode][level_index], rules)
+	if _hint_job.done:
+		var suggestion: Dictionary = _hint_job.result
+		_hint_job = null
+		_apply_hint(suggestion)
+	else:
+		hint_button.disabled = true
+		status_label.text = "Finding a gentle nudge... You can keep playing."
+
+func _cancel_hint() -> void:
+	if _hint_job != null:
+		_hint_job = null
+		if is_instance_valid(hint_button):
+			hint_button.disabled = run_kind == "tutorial" or completion_pending
+		if is_instance_valid(status_label):
+			status_label.text = "Hint paused. Tap Hint whenever you're ready."
+
+func _apply_hint(suggestion: Dictionary) -> void:
 	if suggestion.is_empty():
 		status_label.text = "No hint here yet. Try undo, or a fresh start."
-	elif suggestion.kind == "undo":
+	elif suggestion.get("kind") == "undo":
 		status_label.text = "Undo %d move%s to return to a known route. Undo still affects your score." % [suggestion.count, "" if suggestion.count == 1 else "s"]
-	else:
+	elif suggestion.get("kind") == "move":
 		var action: Array = suggestion.action
 		if mode == "parcel":
 			board.guide_lane = action[0]
@@ -691,10 +812,12 @@ func show_hint() -> void:
 			status_label.text = "Try moving the highlighted pal one step %s. Hints are free!" % word
 			_update_arrows()
 			_stash_session()
+	else:
+		status_label.text = "No hint found within the search limit. Try undo or a fresh start."
 	board.queue_redraw()
 
 func play_move(index: int, direction: Vector2i) -> void:
-	if screen_name != "game" or completion_pending:
+	if screen_name != "game" or completion_pending or is_instance_valid(_restart_dialog):
 		return
 	if active_actions.size() >= Session.MAX_ACTIONS:
 		status_label.text = "That's a lot of nudges! Undo or restart for a fresh try."
@@ -740,7 +863,7 @@ func play_move(index: int, direction: Vector2i) -> void:
 		_stash_session()
 
 func undo_move() -> void:
-	if screen_name != "game" or completion_pending:
+	if screen_name != "game" or completion_pending or is_instance_valid(_restart_dialog):
 		return
 	if rules.undo():
 		_clear_hint()
@@ -757,6 +880,10 @@ func undo_move() -> void:
 		feedback.play("undo")
 
 func _refresh() -> void:
+	if is_instance_valid(challenge_label):
+		challenge_label.text = "Practice" if run_kind == "tutorial" else PuzzleProgress.difficulty(mode, levels[mode][level_index]) + " (estimate)"
+		if run_kind != "tutorial" and records.settings.move_goals and _reference_goal > 0:
+			challenge_label.text += " / Reference goal: %d moves" % _reference_goal
 	var best := _best_for_run()
 	var high: int = int(best.get("high_score", 0))
 	if mode == "parcel":
@@ -838,6 +965,8 @@ func show_result() -> void:
 	score_card.add_child(score_label)
 	page.add_child(score_card)
 	page.add_child(_label("Solved in %s   /   Moves %d   /   Undo %d" % [SolveClock.format_time(solve_clock.elapsed_ms), attempt_moves, undo_count], 23))
+	if records.settings.move_goals and _reference_goal > 0:
+		page.add_child(_label(("Reference goal met!" if attempt_moves <= _reference_goal else "Another goal to try next time.") + " Target: %d moves; your moves: %d. This is not a proven minimum." % [_reference_goal, attempt_moves], 22, TEAL))
 	page.add_child(_label("Level best: %d points\nFastest: %s   /   Fewest moves: %d\nTimes solved: %d" % [result.best.high_score, SolveClock.format_time(int(result.best.best_time_ms)), result.best.fewest_moves, result.best.solves], 23, MUTED))
 	if run_kind == "daily":
 		page.add_child(_label("Your personal best for this day's puzzle. Regular rankings stay separate.", 21, MUTED))
@@ -845,7 +974,7 @@ func show_result() -> void:
 		page.add_child(_button("Play regular puzzles", open_game.bind(mode)))
 	else:
 		page.add_child(_label("%d / %d puzzles in your collection." % [progress.parcel.size() + progress.block.size(), _total_levels()], 22, MUTED))
-		page.add_child(_button("One more little puzzle   >" if level_index < levels[mode].size() - 1 else "Back to collection", start_level.bind(mode, level_index + 1) if level_index < levels[mode].size() - 1 else show_home, true))
+		page.add_child(_button("Find my next puzzle >", find_next_puzzle.bind(mode), true))
 		page.add_child(_button("Say hello to the other game", open_game.bind("block" if mode == "parcel" else "parcel")))
 	var options := HBoxContainer.new()
 	options.add_theme_constant_override("separation", 12)
@@ -1031,6 +1160,8 @@ func show_settings() -> void:
 	page.add_child(_button("Vibration: " + ("On" if records.settings.vibration else "Off"), _toggle_setting.bind("vibration"), records.settings.vibration))
 	page.add_child(_button("Reduced motion: " + ("On" if records.settings.reduced_motion else "Off"), _toggle_setting.bind("reduced_motion"), records.settings.reduced_motion))
 	page.add_child(_button("Number symbols: " + ("On" if records.settings.clear_symbols else "Off"), _toggle_setting.bind("clear_symbols"), records.settings.clear_symbols))
+	page.add_child(_button("Move goals: " + ("On" if records.settings.move_goals else "Off"), _toggle_setting.bind("move_goals"), records.settings.move_goals))
+	page.add_child(_label("Move goals use a verified solution, not a proven minimum. They never change scores or rewards.", 21, MUTED))
 	page.add_child(_label("Reduced motion keeps pals still. Number symbols match parcels, pals and gates using 1 to 4.", 21, MUTED))
 	page.add_child(_button("Preview my settings", _preview_feedback))
 	page.add_child(_label("Vibration depends on your phone and its system settings. Your choices are saved for everyone on this device.", 21, MUTED))

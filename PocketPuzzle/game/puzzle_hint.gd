@@ -14,11 +14,11 @@ static func state_key(mode: String, state) -> String:
 		return JSON.stringify([queues, waiting, int(state.delivered)])
 	var pieces: Array = []
 	for piece in state.pieces:
-		pieces.append([int(piece.x), int(piece.y), bool(piece.out)])
+		pieces.append([0, 0, true] if piece.out else [int(piece.x), int(piece.y), false])
 	return JSON.stringify(pieces)
 
-static func suggest(mode: String, level: Dictionary, live) -> Dictionary:
-	if not mode in ["parcel", "block"] or live.won():
+static func verified_route(mode: String, level: Dictionary) -> Dictionary:
+	if not mode in ["parcel", "block"]:
 		return {}
 	var solution: Array = level.get("solution", [])
 	if solution.is_empty() or solution.size() > MAX_STEPS:
@@ -35,6 +35,15 @@ static func suggest(mode: String, level: Dictionary, live) -> Dictionary:
 		route[key] = action
 	if not replay.won():
 		return {}
+	return route
+
+static func suggest(mode: String, level: Dictionary, live) -> Dictionary:
+	if not mode in ["parcel", "block"] or live.won():
+		return {}
+	var route := verified_route(mode, level)
+	return from_route(mode, live, route)
+
+static func from_route(mode: String, live, route: Dictionary) -> Dictionary:
 	var current := state_key(mode, live)
 	if route.has(current):
 		return {"kind": "move", "action": route[current].duplicate()}

@@ -61,6 +61,8 @@ func _run() -> void:
 	for day in range(1, 31):
 		screen.records.record_daily("2026-11-%02d" % day, "parcel", 15000, 8, 0)
 	screen.records.select_avatar("bunny_mail")
+	screen.show_levels("block", 4)
+	await _capture("completed-difficulty")
 	screen.show_home()
 	await _capture("journey-home")
 	for game_mode in ["parcel", "block"]:
@@ -85,6 +87,22 @@ func _run() -> void:
 	await _capture("journey-growing")
 	screen.show_rankings()
 	await _capture("sticker-rankings")
+	screen.records.settings.move_goals = true
+	screen.start_level("parcel", 1)
+	screen.play_move(2, Vector2i.ZERO)
+	screen.show_hint()
+	for frame in range(300):
+		if screen._hint_job == null:
+			break
+		await process_frame
+	await _capture("smart-hint")
+	screen.restart_run()
+	await _capture("restart-confirmation")
+	screen._finish_restart(false)
+	screen.show_levels("block", 4)
+	await _capture("difficulty-levels")
+	screen.show_settings()
+	await _capture("move-goal-settings")
 	screen.queue_free()
 	await process_frame
 	for suffix in ["", ".bak", ".tmp"]:

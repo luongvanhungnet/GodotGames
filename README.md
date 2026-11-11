@@ -31,6 +31,10 @@ Build 0.7 adds **Journey maps** (five chapters per game), a **20-sticker album**
 **10 local achievement badges**, earned sticker avatars, and a clear next goal.
 Existing completions receive automatic credit; all levels remain playable.
 See [journey and collections](PocketPuzzle/docs/journey.md) for reward requirements.
+Build 0.8 adds incremental current-board hints, difficulty estimates, **Find next**
+navigation that resumes saved attempts first, optional verified reference move
+goals, and confirmation before restarting an attempt with moves. See
+[smarter hints and progression](PocketPuzzle/docs/progression.md).
 
 ## Local
 The Git repository root is `D:\GodotGames`; the Godot project is `PocketPuzzle/`.
@@ -55,6 +59,7 @@ Run project commands from the project directory:
     godot --headless --path . --script tests/daily_joy.gd
     godot --headless --path . --script tests/comfort.gd
     godot --headless --path . --script tests/journey.gd
+    godot --headless --path . --script tests/progression.gd
     godot --headless --path . --quit-after 5
 
 Regenerate levels with `python tools/generate_levels.py`, then rerun all test suites.

@@ -6,6 +6,12 @@ puzzles. The chooser has five pages per game. Every level has a checked solution
 
 ## Time and moves
 
+Build 0.8 reference move goals are optional and cosmetic; meeting one does not
+change scores, stickers or ranking order. They use a verified solution length,
+not a proven minimum. The timer continues while hints search, but pauses during
+restart confirmation. Canceling that confirmation preserves the board, counters,
+undo history and elapsed active time; confirming resets that attempt only.
+
 Build 0.6 hints are free. Asking for guidance does not increment moves or undo,
 pause the timer, or reduce scores. Following an undo suggestion uses the ordinary
 Undo button and its usual penalty. Local rankings include solves made with hints.

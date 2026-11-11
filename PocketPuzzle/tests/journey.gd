@@ -104,7 +104,7 @@ func _test_ui() -> void:
 		var last = screen.page.find_child("VisitChapter4", true, false)
 		last.pressed.emit()
 		var grid = screen.page.find_children("*", "GridContainer", true, false)[0]
-		_check(screen.screen_name == "levels" and grid.get_child_count() == 30 and grid.get_child(29).text == "150" and not grid.get_child(29).disabled, "Chapter map opens the exact level page without locking later levels")
+		_check(screen.screen_name == "levels" and grid.get_child_count() == 30 and grid.get_child(29).text.begins_with("150 /") and not grid.get_child(29).disabled, "Chapter map opens the exact level page without locking later levels")
 	var seen := {}
 	for number in range(5):
 		screen.show_album(number)

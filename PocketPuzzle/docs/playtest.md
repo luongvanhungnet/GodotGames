@@ -1,4 +1,4 @@
-# PocketPuzzle playtest build 0.7.0
+# PocketPuzzle playtest build 0.8.0
 
 This build compares two playable 2D puzzle ideas. It is an offline prototype for
 testing enjoyment, clarity, and difficulty. Revenue and retention are unmeasured.
@@ -15,12 +15,21 @@ attempt and one daily attempt are retained per game and player. Choosing another
 regular level replaces that game's pending regular attempt. Uninstalling removes
 local progress and settings.
 
+Restart asks for confirmation once an attempt has moves. **Keep playing** or
+Android Back cancels the prompt. The timer pauses while the prompt is open.
+**Find next** on a journey map resumes an existing regular attempt first; when
+there is none, it selects the earliest unfinished level. Result screens offer
+the same action. Difficulty labels are initial estimates, not measured player
+ratings. Optional **Move goals** in Settings show a verified reference solution's
+move count, without claiming it is the minimum. See `progression.md` for limits.
+
 **Learn** opens an interactive, unranked lesson. New players get a lesson when
 first opening a regular game. **Daily Joy** chooses one existing puzzle per game
 for the local date and stores separate daily personal bests. Settings controls
 gentle sound effects and optional vibration. See `daily-joy.md` for details.
 Settings also offers reduced motion and numbered matching symbols. **Hint**
-highlights a verified next move or suggests undo steps back to a known route.
+looks for a verified forward path from the current board, with undo guidance as
+a fallback when the bounded search cannot find one.
 Hints are free and do not make moves. See `comfort.md` for limits and controls.
 
 Use **Map** beside either game's Play button to visit five themed chapters of

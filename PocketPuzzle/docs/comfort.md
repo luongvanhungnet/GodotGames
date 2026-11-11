@@ -21,12 +21,12 @@ move, reset the timer, or add to the move/undo counters. There is no cost, ad,
 quota, or score penalty for asking. Actual moves and undo keep their usual scoring.
 Local rankings include solves made with hints.
 
-Hints replay the catalogue's verified solution in separate rules, comparing its
-board states with the current board. If the current state is on that route, the
-next legal action is shown. If it is elsewhere, the hint suggests how many undo
-steps return to a known route. A different route may also be solvable; this is
-guidance toward one verified solution, not a shortest-path solver. Undo is always
-the player's choice and retains its normal scoring penalty.
+From build 0.8, hints replay the catalogue's verified solution and incrementally
+search from an alternate current board to a verified route or a win. When that
+bounded search cannot find a forward path, guidance falls back to undo steps
+leading to a known route. This does not prove that an alternate board is
+unsolvable or that a suggested route is shortest. Undo is always the player's
+choice and retains its normal scoring penalty. See [search limits](progression.md).
 
 Successful moves and undo clear stale hints. Lessons already have step-by-step
 guides, so their Hint button is disabled. Hint computations have a bounded

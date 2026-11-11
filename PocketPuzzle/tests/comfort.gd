@@ -83,7 +83,11 @@ func _test_ui() -> void:
 	screen.play_move(2, Vector2i.ZERO)
 	_check(screen.board.guide_lane == -1, "A successful move clears stale hint highlights")
 	screen.show_hint()
-	_check(screen.status_label.text.contains("Undo 1") and screen.attempt_moves == 1, "Off-route UI asks for undo without applying it")
+	for frame in range(120):
+		if screen._hint_job == null:
+			break
+		await process_frame
+	_check((screen.board.guide_lane >= 0 or screen.status_label.text.contains("Undo")) and screen.attempt_moves == 1, "Off-route UI offers bounded guidance without applying a move")
 	screen.undo_move()
 	screen.show_settings()
 	screen._toggle_setting("reduced_motion")
