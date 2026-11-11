@@ -17,7 +17,7 @@ static func clean_note(value: String) -> String:
 func submit(mode: String, number: int, catalogue: Dictionary, kind: String, day: String, rating: String, note: String) -> bool:
 	if not mode in ["parcel", "block"] or number < 0 or number >= catalogue[mode].size() or not RATINGS.has(rating) or not kind in ["normal", "daily"] or (kind == "daily" and not Daily.valid_date(day)):
 		return false
-	var entry := {"mode": mode, "level": number, "seed": int(catalogue[mode][number].seed), "kind": kind, "day": day if kind == "daily" else "", "rating": rating, "note": clean_note(note), "difficulty_estimate": Progress.difficulty(mode, catalogue[mode][number]), "game_version": "0.9.0"}
+	var entry := {"mode": mode, "level": number, "seed": int(catalogue[mode][number].seed), "kind": kind, "day": day if kind == "daily" else "", "rating": rating, "note": clean_note(note), "difficulty_estimate": Progress.difficulty(mode, catalogue[mode][number]), "game_version": str(ProjectSettings.get_setting("application/config/version", "1.0.0"))}
 	# One latest opinion per puzzle context on this device, without tracking who.
 	entries = entries.filter(func(previous): return not (previous.mode == mode and previous.level == number and previous.kind == kind and previous.day == entry.day))
 	entries.append(entry)
@@ -26,7 +26,7 @@ func submit(mode: String, number: int, catalogue: Dictionary, kind: String, day:
 	return true
 
 func to_data() -> Dictionary:
-	return {"format": "PocketPuzzlePlaytest", "version": 1, "game_version": "0.9.0", "entries": entries.duplicate(true)}
+	return {"format": "PocketPuzzlePlaytest", "version": 1, "game_version": str(ProjectSettings.get_setting("application/config/version", "1.0.0")), "entries": entries.duplicate(true)}
 
 func restore(data: Dictionary, catalogue: Dictionary) -> void:
 	entries = []

@@ -8,6 +8,7 @@ import zipfile
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--apk", action="store_true", help="Export a directly installable APK instead of an AAB")
     parser.add_argument("--preview", action="store_true", help="Debug-signed review bundle; not for Play upload")
     parser.add_argument("--package-id", help="Final application ID, required for a production bundle")
     args = parser.parse_args()
@@ -37,11 +38,13 @@ def main():
     try:
         if not args.preview:
             text = original.decode("utf-8")
-            before, options = text.split("[preset.1.options]", 1)
-            options = re.sub(r'package/unique_name="[^"]+"', 'package/unique_name="' + args.package_id + '"', options, count=1)
-            preset.write_text(before + "[preset.1.options]" + options, encoding="utf-8")
+            text = re.sub(r'package/unique_name="[^"]+"', 'package/unique_name="' + args.package_id + '"', text)
+            preset.write_bytes(text.encode("utf-8"))
         output = "builds/PocketPuzzle-preview.aab" if args.preview else "builds/PocketPuzzle-release.aab"
-        command = [godot, "--headless", "--path", ".", "--install-android-build-template", "--export-debug" if args.preview else "--export-release", "Android Bundle", output, "--quit"]
+        if args.apk:
+            output = "builds/PocketPuzzle-preview.apk" if args.preview else "builds/PocketPuzzle-release.apk"
+        pathlib.Path(output).unlink(missing_ok=True)
+        command = [godot, "--headless", "--path", ".", "--install-android-build-template", "--export-debug" if args.preview else "--export-release", "Android" if args.apk else "Android Bundle", output, "--quit"]
         environment = os.environ.copy()
         # A persistent Windows Gradle daemon can retain the exporter's pipe.
         environment["GRADLE_OPTS"] = (environment.get("GRADLE_OPTS", "") + " -Dorg.gradle.daemon=false").strip()
@@ -54,7 +57,7 @@ def main():
         if result.returncode:
             raise SystemExit("Bundle export failed; inspect builds/bundle-export.log")
         with zipfile.ZipFile(output) as bundle:
-            if bundle.testzip() or "BundleConfig.pb" not in bundle.namelist() or "base/manifest/AndroidManifest.xml" not in bundle.namelist():
+            if bundle.testzip() or ("AndroidManifest.xml" not in bundle.namelist() if args.apk else "BundleConfig.pb" not in bundle.namelist() or "base/manifest/AndroidManifest.xml" not in bundle.namelist()):
                 raise SystemExit("Export did not produce a valid Android App Bundle archive")
         print(output + (" — debug-signed preview, not for store upload" if args.preview else " — release-signed; review in Play internal testing before production"))
     finally:

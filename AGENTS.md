@@ -36,6 +36,10 @@ The current playtest build contains Parcel Sort and Block Exit, with 150 levels 
   daily reward history, avatar eligibility, migration, and profile isolation.
 - Progression tests cover bounded incremental hints, cancellation, difficulty
   estimates, verified reference goals, preserved pending attempts and restart prompts.
+- Help & About and opening coaching are covered by progression tests, including
+  returning to an unfinished puzzle without losing moves.
+- Private feedback dashboards are generated only under ignored builds/ and must
+  never be copied to the studio website or committed with player notes.
 - Run relevant gameplay tests when gameplay is added.
 - Fail tests with nonzero exit status. Report checks that could not run.
 - Headless results do not establish rendering quality or device performance.

@@ -37,6 +37,7 @@ func _run() -> void:
 	_test_catalogue()
 	_test_search()
 	await _test_ui()
+	await _test_help()
 	if failures == 0:
 		print("PASS: bounded current-board hints, cancellation, difficulty estimates, verified move goals, safe next-puzzle selection and restart confirmation (%d checks)" % checks)
 	quit(0 if failures == 0 else 1)
@@ -206,5 +207,32 @@ func _test_ui() -> void:
 	root.add_child(screen)
 	_check(screen.records.settings.move_goals and screen.records.best("parcel", 0).high_score == score, "Goals and historical scores persist through reload")
 	screen.queue_free()
+	await process_frame
+	_cleanup()
+
+func _test_help() -> void:
+	var scene = load("res://node_2d.tscn").instantiate()
+	scene.save_path = TEST_SAVE
+	root.add_child(scene)
+	await process_frame
+	for game_mode in ["parcel", "block"]:
+		for number in range(10):
+			scene.start_level(game_mode, number)
+			_check(not scene.OpeningGuide.text(game_mode, number).is_empty(), "Every opening puzzle has coaching")
+		scene.start_level(game_mode, 0)
+		var action = scene.levels[game_mode][0].solution[0]
+		if game_mode == "parcel":
+			scene.play_move(int(action), Vector2i.ZERO)
+		else:
+			scene.play_move(int(action[0]), Vector2i(int(action[1]), int(action[2])))
+		scene.show_settings()
+		var resume_key: String = scene._settings_return
+		scene.show_help()
+		_check(scene.screen_name == "help" and scene.attempt_moves == 1, "Help opens from paused Settings")
+		scene.show_settings()
+		_check(scene._settings_return == resume_key and not resume_key.is_empty(), "Help preserves puzzle return destination")
+		scene.resume_saved(resume_key)
+		_check(scene.screen_name == "game" and scene.attempt_moves == 1, "Return from Help preserves the unfinished move")
+	scene.queue_free()
 	await process_frame
 	_cleanup()

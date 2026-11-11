@@ -27,6 +27,7 @@ const CREAM := Look.BACKGROUND
 const PAPER := Look.PAPER
 const CORAL := Look.ROSE
 const TEAL := Look.MINT
+const OpeningGuide = preload("res://game/opening_guide.gd")
 var save_path := "user://progress.json"
 var levels: Dictionary = {}
 var progress: Dictionary = {"parcel": [], "block": [], "last_parcel": 0, "last_block": 0}
@@ -148,6 +149,8 @@ func _notification(what: int) -> void:
 			_finish_restart(false)
 		elif screen_name == "home":
 			get_tree().quit()
+		elif screen_name == "help":
+			show_settings()
 		elif screen_name == "settings" and not _settings_return.is_empty():
 			resume_saved(_settings_return)
 		elif screen_name == "settings" and not _settings_lesson.is_empty():
@@ -640,6 +643,9 @@ func start_level(game_mode: String, number: int, kind: String = "normal", day: S
 	page.add_child(nav)
 	page.add_child(_label("Let's send a little happiness!" if mode == "parcel" else "A little nudge. A happy exit.", 30))
 	instructions_label = _label("Tap a queue to send a parcel. Extras wait for their turn." if mode == "parcel" else "Tap a pal, then swipe or use the arrows. Find its matching gate!", 22, MUTED)
+	if run_kind == "normal" and level_index < 10:
+		instructions_label.text = OpeningGuide.text(mode, level_index)
+		instructions_label.add_theme_color_override("font_color", TEAL)
 	page.add_child(instructions_label)
 	challenge_label = _label("", 20, TEAL)
 	page.add_child(challenge_label)
@@ -1176,7 +1182,7 @@ func _show_lesson_complete() -> void:
 	page.add_child(_button("Back to our happy place", show_home))
 
 func show_settings() -> void:
-	if screen_name != "settings":
+	if not screen_name in ["settings", "help"]:
 		_settings_return = Session.key(run_kind, mode) if screen_name == "game" and run_kind != "tutorial" else ""
 		_settings_lesson = mode if screen_name == "game" and run_kind == "tutorial" else ""
 	_clear_page()
@@ -1193,6 +1199,7 @@ func show_settings() -> void:
 	page.add_child(_label("Reduced motion keeps pals still. Number symbols match parcels, pals and gates using 1 to 4.", 21, MUTED))
 	page.add_child(_button("Preview my settings", _preview_feedback))
 	page.add_child(_label("Vibration depends on your phone and its system settings. Your choices are saved for everyone on this device.", 21, MUTED))
+	page.add_child(_button("Help & About", show_help))
 	page.add_child(_button("Backups & playtest notes", data_tools.show_page))
 	if not _settings_return.is_empty():
 		page.add_child(_button("Back to my puzzle", resume_saved.bind(_settings_return), true))
@@ -1219,3 +1226,24 @@ func _load_progress() -> void:
 func _save_progress() -> void:
 	if not Store.save_data(save_path, records.to_data()):
 		push_warning("Local progress could not be saved")
+
+func show_help() -> void:
+	_clear_page()
+	screen_name = "help"
+	_header("HELP & ABOUT")
+	page.add_child(_label("Hello, puzzle pal!", 42))
+	for section in [
+		["Parcel Sort", "Tap a queue to send its front parcel. Match the next colour on the route. Extras use one of three waiting slots and deliver automatically when their turn comes. A matching parcel can deliver even when waiting is full."],
+		["Block Exit", "Tap a pal to select it. Swipe or tap an arrow to move one square. Slide its entire shape through its matching colour gate. Walls and other pals block the way."],
+		["Take your time", "There is no countdown. Undo reverses a move; Hint suggests a move without playing it. Restart asks before replacing a run you have moved in. Settings pauses active solve time."],
+		["Scores & local rankings", "Score = 1000 + max(0, 2000 - elapsed tenths of a second) + max(0, 3000 - 40 x moves - 120 x undos). Rankings sum each regular puzzle's best score for local players on this device. Daily puzzles and lessons are separate. Move goals show a verified solution, not a proven minimum."],
+		["Your progress", "Regular and daily unfinished games save locally. Use Backups & playtest notes to export or restore a backup. Restoring replaces all local players after confirmation. Keep exported backups private."],
+		["Comfort", "Settings offers sound, vibration, reduced motion and number symbols. Tap Learn to replay a guided lesson. Optional feedback stays local until you export and send it yourself."],
+		["About PocketPuzzle", "Version 1.0.0 / BoomBatsa / 300 offline puzzles. Made with Godot 4.7.2 Standard and the Nunito font (SIL Open Font License). No ads, purchases, online accounts or online rankings."],
+		["Support", "tsabommba@gmail.com. Include the game version and puzzle number. Please leave out private backups unless support asks for one."]
+	]:
+		page.add_child(_label(section[0], 29, Look.PURPLE))
+		page.add_child(_label(section[1], 22, MUTED))
+	page.add_child(_button("Studio & downloads (opens browser)", func(): OS.shell_open("https://boombatsa.win/games/pocketpuzzle/")))
+	page.add_child(_button("Privacy policy (opens browser)", func(): OS.shell_open("https://boombatsa.win/games/pocketpuzzle/privacy-policy.html")))
+	page.add_child(_button("< Back to Settings", show_settings, true))

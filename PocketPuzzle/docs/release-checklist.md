@@ -1,5 +1,8 @@
 # PocketPuzzle 0.9 release preparation
 
+Historical review-build notes. For the signed 1.0 studio APK and current private
+feedback tools, see [release-1.0.md](release-1.0.md).
+
 This is a review package, not a published store release. Keep the Godot editor and
 export templates pinned to `.godot-version` (4.7.2 Standard, Compatibility).
 Run every project command from PocketPuzzle.

@@ -130,3 +130,8 @@ portrait orientation, readable layout on different aspect ratios, safe areas,
 pause/resume, offline startup, and graphics/performance.
 No revenue, gameplay, rendering performance, or device compatibility is
 established by the initial startup smoke check.
+
+
+PocketPuzzle 1.0 adds in-game Help & About and coaching for the first 10 puzzles
+per game. Studio release and private feedback administration are documented in
+[PocketPuzzle/docs/release-1.0.md](PocketPuzzle/docs/release-1.0.md).

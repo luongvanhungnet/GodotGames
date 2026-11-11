@@ -21,6 +21,18 @@ class ReviewTests(unittest.TestCase):
             self.assertIn("reference goal", rows[0]["review"])
             self.assertNotIn("private", json.dumps(rows))
 
+    def test_private_admin_escapes_notes_and_marks_empty_evidence(self):
+        with tempfile.TemporaryDirectory() as folder:
+            report = pathlib.Path(folder) / "report.json"
+            report.write_text(json.dumps({"format": "PocketPuzzlePlaytest", "version": 1, "entries": [{"note": "<script>alert(1)</script>", "mode": "parcel", "level": 0}]}))
+            destination = pathlib.Path(folder) / "admin.html"
+            analysis.write_admin(destination, [], 0, [report])
+            page = destination.read_text()
+            self.assertNotIn("<script>", page)
+            self.assertIn("&lt;script&gt;", page)
+            self.assertIn("No real-player evidence loaded", page)
+            self.assertIn("default-src 'none'", page)
+
     def test_stale_and_unrecognized_reports_are_skipped(self):
         with tempfile.TemporaryDirectory() as folder:
             path = pathlib.Path(folder) / "report.json"
